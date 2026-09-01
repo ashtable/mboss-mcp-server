@@ -405,7 +405,7 @@ describe('project_debug', () => {
     ]);
   });
 
-  it('reads the steps of a run that is not there at all', async () => {
+  it('asks for no steps when the named run is gone', async () => {
     const db = fakeDatabase([[]]);
 
     const seen = await output<DebugOutput>(
