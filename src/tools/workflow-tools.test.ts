@@ -499,6 +499,22 @@ describe('workflow_scaffold_step', () => {
     await applySample(TYPED_DRAFT, 1);
   }
 
+  /**
+   * The projects these land in run
+   * `prettier --check` over `lib/`, and they format
+   * to the same settings this repo does. A stub
+   * that is not already what this returns arrives
+   * failing the project's own lint.
+   */
+  function formatted(source: string): Promise<string> {
+    return format(source, {
+      parser: 'typescript',
+      singleQuote: true,
+      semi: true,
+      printWidth: 80,
+    });
+  }
+
   it('writes a typed handler stub and its test', async () => {
     await withTypedDraft();
 
@@ -558,20 +574,10 @@ describe('workflow_scaffold_step', () => {
       call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'work' }),
     );
 
-    // The projects these land in run
-    // `prettier --check` over `lib/`, and they
-    // format to the same settings this repo does.
     for (const file of scaffolded.created) {
       const written = readFileSync(file.path, 'utf8');
 
-      expect(
-        await format(written, {
-          parser: 'typescript',
-          singleQuote: true,
-          semi: true,
-          printWidth: 80,
-        }),
-      ).toBe(written);
+      expect(await formatted(written)).toBe(written);
     }
   });
 
@@ -613,14 +619,75 @@ describe('workflow_scaffold_step', () => {
     expect(written).toContain(
       'export async function aRatherLongHandlerName(\n',
     );
-    expect(
-      await format(written, {
-        parser: 'typescript',
-        singleQuote: true,
-        semi: true,
-        printWidth: 80,
-      }),
-    ).toBe(written);
+    expect(await formatted(written)).toBe(written);
+  });
+
+  it('leaves a signature with no parameter on one line', async () => {
+    await createSample();
+    await applySample(
+      {
+        ...TYPED_DRAFT,
+        nodes: [
+          TYPED_DRAFT.nodes[0],
+          {
+            id: 'work',
+            title: 'Work',
+            kind: 'step',
+            config: {},
+            out: 'BookingConfirmationResultPayload',
+            handler: { export: 'recordTheBookingConfirmation' },
+          },
+        ],
+      },
+      1,
+    );
+
+    await output(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'work' }),
+    );
+
+    const written = readFileSync(
+      join(fixture.dir, 'lib', 'recordTheBookingConfirmation.ts'),
+      'utf8',
+    );
+
+    expect(await formatted(written)).toBe(written);
+  });
+
+  it('leaves a lone imported type on one line', async () => {
+    await mkdir(join(fixture.dir, 'lib'), { recursive: true });
+    writeFileSync(
+      join(fixture.dir, 'lib', 'booking-confirmation-types.ts'),
+      'export type BookingConfirmationRequestPayload = { id: string };\n',
+      'utf8',
+    );
+
+    await createSample();
+    await applySample(
+      {
+        ...TYPED_DRAFT,
+        nodes: [
+          TYPED_DRAFT.nodes[0],
+          {
+            ...TYPED_DRAFT.nodes[1],
+            in: 'BookingConfirmationRequestPayload',
+            out: 'BookingConfirmationRequestPayload',
+          },
+        ],
+      },
+      1,
+    );
+
+    await output(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'work' }),
+    );
+
+    const written = readFileSync(
+      join(fixture.dir, 'lib', 'findSlot.ts'),
+      'utf8',
+    );
+
+    expect(await formatted(written)).toBe(written);
   });
 
   it('still names a type the code-behind has not got yet', async () => {
