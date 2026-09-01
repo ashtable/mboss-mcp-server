@@ -1,3 +1,39 @@
 {
-  "tools": []
+  "tools": [
+    {
+      "name": "workflow_apply_spec",
+      "title": "workflow.apply_spec",
+      "description": "Previews a complete workflow document as a proposal, or applies one."
+    },
+    {
+      "name": "workflow_create",
+      "title": "workflow.create",
+      "description": "Creates an empty workflow draft."
+    },
+    {
+      "name": "workflow_delete_node",
+      "title": "workflow.delete_node",
+      "description": "Deletes a node and its edges, bridging the gap where that is unambiguous."
+    },
+    {
+      "name": "workflow_get",
+      "title": "workflow.get",
+      "description": "Reads a workflow document, its revision and its diagnostics."
+    },
+    {
+      "name": "workflow_rename_node",
+      "title": "workflow.rename_node",
+      "description": "Renames a node and every reference to it."
+    },
+    {
+      "name": "workflow_scaffold_step",
+      "title": "workflow.scaffold_step",
+      "description": "Writes typed handler and test stubs for a node with no code behind it."
+    },
+    {
+      "name": "workflow_validate",
+      "title": "workflow.validate",
+      "description": "Checks a workflow, or a spec not yet on disk, without changing anything."
+    }
+  ]
 }

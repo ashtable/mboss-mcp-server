@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import type { VersionNegotiationMode } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -116,6 +117,56 @@ describe('the stdio server', () => {
     await expect(
       client.callTool({ name: 'workflow_nope', arguments: {} }),
     ).rejects.toThrow(/workflow_nope/);
+  });
+
+  /**
+   * The three cases below are what an in-process
+   * test cannot answer: whether a real client
+   * accepts what these tools actually send. Every
+   * tool declares an output schema, and a coded
+   * failure does not match it — so a client that
+   * validated one against the other would reject
+   * every failure this server has to report.
+   */
+  it('runs a workflow tool for a real SDK client', async () => {
+    const client = await connect();
+
+    await client.callTool({
+      name: 'workflow_create',
+      arguments: { name: 'sample' },
+    });
+    const read = await client.callTool({
+      name: 'workflow_get',
+      arguments: { name: 'sample' },
+    });
+
+    expect(read.isError ?? false).toBe(false);
+    expect(read.structuredContent).toMatchObject({
+      name: 'sample',
+      revision: 1,
+    });
+  });
+
+  it('sends a coded failure through as a tool error', async () => {
+    const client = await connect();
+
+    const read = await client.callTool({
+      name: 'workflow_get',
+      arguments: { name: 'nope' },
+    });
+
+    expect(errorCodeOf(read as CallToolResult)).toBe('WORKFLOW_NOT_FOUND');
+  });
+
+  it('sends a refused argument through as a tool error', async () => {
+    const client = await connect();
+
+    const checked = await client.callTool({
+      name: 'workflow_validate',
+      arguments: {},
+    });
+
+    expect(checked.isError).toBe(true);
   });
 });
 

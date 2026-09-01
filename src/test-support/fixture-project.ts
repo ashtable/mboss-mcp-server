@@ -18,6 +18,9 @@ export type Fixture = {
   cleanup(): void;
 };
 
+/** A fixture that is a project, so it has a `.mboss/`. */
+export type ProjectFixture = Fixture & { mbossDir: string };
+
 /**
  * A directory holding an empty mBoss project.
  *
@@ -27,11 +30,12 @@ export type Fixture = {
  * asked for against the one a tool reports would
  * otherwise fail for the wrong reason.
  */
-export function makeFixtureProject(): Fixture {
+export function makeFixtureProject(): ProjectFixture {
   const fixture = makeBareDirectory();
-  mkdirSync(join(mbossDirOf(fixture.dir), 'workflows'), { recursive: true });
+  const mbossDir = mbossDirOf(fixture.dir);
+  mkdirSync(join(mbossDir, 'workflows'), { recursive: true });
 
-  return fixture;
+  return { ...fixture, mbossDir };
 }
 
 /** A directory that is not an mBoss project. */

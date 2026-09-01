@@ -2,6 +2,13 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import type { z } from 'zod';
 
 import type { ToolContext } from './project.js';
+import { workflowApplySpec } from './tools/workflow-apply-spec.js';
+import { workflowCreate } from './tools/workflow-create.js';
+import { workflowDeleteNode } from './tools/workflow-delete-node.js';
+import { workflowGet } from './tools/workflow-get.js';
+import { workflowRenameNode } from './tools/workflow-rename-node.js';
+import { workflowScaffoldStep } from './tools/workflow-scaffold-step.js';
+import { workflowValidate } from './tools/workflow-validate.js';
 
 /**
  * One tool, as everything downstream reads it:
@@ -34,7 +41,22 @@ export type ToolDefinition = {
 
 /**
  * Every tool the server exposes, in the order it
- * registers them. The workflow tools and the
- * project tools are added here as they land.
+ * registers them: the workflow tools, which read
+ * and change the graph, then the project tools,
+ * which build and run what the graph compiles to.
+ *
+ * Within the workflow tools the order is the order
+ * an agent meets them — look, create, change,
+ * check, then the three edits that are shorthand
+ * for a change it would otherwise spell out in
+ * full.
  */
-export const TOOLS: readonly ToolDefinition[] = [];
+export const TOOLS: readonly ToolDefinition[] = [
+  workflowGet,
+  workflowCreate,
+  workflowApplySpec,
+  workflowValidate,
+  workflowScaffoldStep,
+  workflowRenameNode,
+  workflowDeleteNode,
+];

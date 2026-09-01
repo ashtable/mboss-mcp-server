@@ -10,13 +10,23 @@ import type { ToolError } from './errors.js';
  * handed to the tool, so no tool builds a
  * `.mboss/` path of its own.
  */
-export type ToolContext = {
+export type ProjectPaths = {
   projectDir: string;
   mbossDir: string;
 };
 
+/**
+ * Everything a tool is told about the call it is
+ * serving: where it is, and who is asking.
+ *
+ * `proposedBy` is shown to the person approving an
+ * edit — "proposed by claude code" — so it is the
+ * connected client's own name, not this server's.
+ */
+export type ToolContext = ProjectPaths & { proposedBy: string };
+
 export type ResolveProjectOutcome =
-  { ok: true; project: ToolContext } | { ok: false; error: ToolError };
+  { ok: true; project: ProjectPaths } | { ok: false; error: ToolError };
 
 /**
  * Finds the project a directory belongs to.

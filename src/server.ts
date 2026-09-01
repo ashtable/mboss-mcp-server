@@ -31,6 +31,12 @@ export const SERVER_NAME = 'mboss';
 export const SERVER_VERSION = '0.0.0';
 
 /**
+ * What a proposal records when the client did not
+ * say who it is.
+ */
+const UNKNOWN_AGENT = 'unknown agent';
+
+/**
  * Runs one tool in the project `cwd` belongs to.
  *
  * The project is resolved per call rather than at
@@ -44,11 +50,12 @@ export async function runTool(
   tool: ToolDefinition,
   args: unknown,
   cwd: string,
+  proposedBy: string = UNKNOWN_AGENT,
 ): Promise<CallToolResult> {
   const outcome = resolveProject(cwd);
   if (!outcome.ok) return toolFailure(outcome.error);
 
-  return tool.run(args, outcome.project);
+  return tool.run(args, { ...outcome.project, proposedBy });
 }
 
 /**
@@ -74,11 +81,23 @@ export function createServer(cwd: string): McpServer {
         inputSchema: tool.inputSchema,
         outputSchema: tool.outputSchema,
       },
-      (args) => runTool(tool, args, cwd),
+      (args) => runTool(tool, args, cwd, clientNameOf(server)),
     );
   }
 
   return server;
+}
+
+/**
+ * What the connected client calls itself.
+ *
+ * Read per call rather than at startup: a server
+ * is built before a client has said anything about
+ * itself, and this is the only thing in the server
+ * that cares who is on the other end.
+ */
+function clientNameOf(server: McpServer): string {
+  return server.server.getClientVersion()?.name ?? UNKNOWN_AGENT;
 }
 
 /**
