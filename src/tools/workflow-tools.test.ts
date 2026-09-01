@@ -374,6 +374,44 @@ describe('workflow_apply_spec', () => {
 
     expect(proposal?.proposedBy).toBe('the tests');
   });
+
+  it('refuses a proposal raised against a different workflow', async () => {
+    await createSample();
+    await output(call(workflowCreate, { name: 'another' }));
+
+    const preview = await output<ApplyOutput>(
+      call(workflowApplySpec, {
+        name: 'another',
+        spec: DRAFT,
+        dryRun: true,
+        baseRevision: 1,
+      }),
+    );
+
+    expect(
+      await code(
+        call(workflowApplySpec, {
+          name: 'sample',
+          spec: DRAFT,
+          dryRun: false,
+          baseRevision: 1,
+          proposalId: preview.proposalId,
+        }),
+      ),
+    ).toBe('PROPOSAL_NOT_FOUND');
+
+    // Neither document moved: not the one the call
+    // named, and not the one somebody approved.
+    const named = await output<GetOutput>(
+      call(workflowGet, { name: 'sample' }),
+    );
+    const proposed = await output<GetOutput>(
+      call(workflowGet, { name: 'another' }),
+    );
+
+    expect(named.revision).toBe(1);
+    expect(proposed.revision).toBe(1);
+  });
 });
 
 describe('workflow_validate', () => {

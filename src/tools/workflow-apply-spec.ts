@@ -6,6 +6,7 @@ import {
   applyProposal,
   applySpec,
   proposeSpec,
+  readProposal,
 } from '@mboss/core';
 import { z } from 'zod';
 
@@ -112,6 +113,17 @@ async function apply(args: z.infer<typeof Input>, ctx: ToolContext) {
     });
   }
 
+  if (args.proposalId !== undefined) {
+    const wrongWorkflow = await namesAnother(
+      ctx.mbossDir,
+      args.proposalId,
+      args.name,
+    );
+    if (wrongWorkflow) {
+      return toolFailure({ code: 'PROPOSAL_NOT_FOUND', id: args.proposalId });
+    }
+  }
+
   const outcome =
     args.proposalId === undefined
       ? await applySpec(
@@ -131,4 +143,33 @@ async function apply(args: z.infer<typeof Input>, ctx: ToolContext) {
     applied: true,
     revision: outcome.ir.revision,
   });
+}
+
+/**
+ * Whether an approved edit would land somewhere
+ * other than the workflow this call named.
+ *
+ * `applyProposal` takes its target from the
+ * proposal, so a `proposalId` naming a different
+ * workflow than `name` would write to a file the
+ * caller never asked about — and the answer says
+ * nothing about which one it wrote, so nobody finds
+ * out. The two arguments disagreeing is a bug in
+ * the caller, not a preference to be resolved
+ * silently, and this is the same invariant the spec
+ * carrying no name of its own protects from the
+ * other side.
+ *
+ * Read outside the lock, which is safe because it
+ * only ever refuses: `applyProposal` re-reads and
+ * decides authoritatively inside it.
+ */
+async function namesAnother(
+  mbossDir: string,
+  id: string,
+  name: string,
+): Promise<boolean> {
+  const proposal = await readProposal(mbossDir, id);
+
+  return proposal !== undefined && proposal.workflow !== name;
 }
