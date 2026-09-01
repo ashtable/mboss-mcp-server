@@ -172,6 +172,15 @@ describe('the stdio server', () => {
     expect(errorCodeOf(read as CallToolResult)).toBe('WORKFLOW_NOT_FOUND');
   });
 
+  /**
+   * A refused argument is a thrown `Error`, which
+   * the SDK turns into a failure whose only block
+   * is the sentence it was thrown with. Reading a
+   * code back off that has to answer "there is
+   * none" — the helper is what every caller runs
+   * on a failure, and it does not get to decide
+   * which failures it can be handed.
+   */
   it('sends a refused argument through as a tool error', async () => {
     const client = await connect();
 
@@ -181,6 +190,7 @@ describe('the stdio server', () => {
     });
 
     expect(checked.isError).toBe(true);
+    expect(errorCodeOf(checked as CallToolResult)).toBeUndefined();
   });
 
   it('lists its resources to a real SDK client', async () => {
