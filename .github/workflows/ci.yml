@@ -6,7 +6,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The nested sources are imported at typecheck and test time through path aliases.
+          # The nested sources are imported at typecheck
+          # and test time through path aliases.
           submodules: recursive
       - uses: actions/setup-node@v7
         with:
@@ -14,15 +15,18 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run lint
-      # The one file a project vendors. Built before the suite because the
-      # suite is not what produces the shippable copy — this step is — and
-      # a build that only ever ran from inside a test is a build nobody has
-      # checked can run on its own.
+      # The one file a project vendors. Built before
+      # the suite because the suite is not what
+      # produces the shippable copy — this step is —
+      # and a build that only ever ran from inside a
+      # test is a build nobody has checked can run on
+      # its own.
       - run: npm run build:bundle
-      # The suite regenerates tools.manifest.json from the registry and fails
-      # on any difference, so a drifted manifest fails CI here. It also
-      # rebuilds the bundle and speaks to it over stdio from a directory with
-      # nothing else in it.
+      # The suite regenerates tools.manifest.json from
+      # the registry and fails on any difference, so a
+      # drifted manifest fails CI here. It also
+      # rebuilds the bundle and speaks to it over stdio
+      # from a directory with nothing else in it.
       - run: npm test
 
       - name: Upload the bundle
