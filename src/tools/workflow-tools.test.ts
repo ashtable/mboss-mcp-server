@@ -297,6 +297,64 @@ describe('workflow_apply_spec', () => {
     expect(applied.warnings.map((found) => found.code)).toContain('V07');
   });
 
+  /**
+   * The pair below is what pins this server to the
+   * same answer the canvas gives. A wire's type has
+   * to be a type the code-behind exports, and only
+   * a scan of `lib/` knows which those are — so a
+   * server that stopped scanning would accept specs
+   * the canvas refuses.
+   */
+  const TYPED_EDGE = {
+    ...DRAFT,
+    edges: [
+      {
+        id: 'e1',
+        from: { node: 'start' },
+        to: { node: 'work' },
+        type: 'Booking',
+      },
+    ],
+  };
+
+  it('refuses a wire carrying a type the code-behind has not got', async () => {
+    await createSample();
+
+    const found = await failure(
+      call(workflowApplySpec, {
+        name: 'sample',
+        spec: TYPED_EDGE,
+        dryRun: true,
+        baseRevision: 1,
+      }),
+    );
+
+    expect(found['code']).toBe('VALIDATION_FAILED');
+    expect(found['errors']).toEqual([expect.objectContaining({ code: 'V06' })]);
+  });
+
+  it('accepts the same wire once the type is exported', async () => {
+    await mkdir(join(fixture.dir, 'lib'), { recursive: true });
+    writeFileSync(
+      join(fixture.dir, 'lib', 'types.ts'),
+      'export type Booking = { id: string };\n',
+      'utf8',
+    );
+    await createSample();
+
+    const applied = await output<ApplyOutput>(
+      call(workflowApplySpec, {
+        name: 'sample',
+        spec: TYPED_EDGE,
+        dryRun: false,
+        baseRevision: 1,
+      }),
+    );
+
+    expect(applied.errors).toEqual([]);
+    expect(applied.revision).toBe(2);
+  });
+
   it('names whose edit it is when it writes a proposal', async () => {
     await createSample();
 
