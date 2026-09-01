@@ -1,0 +1,46 @@
+{
+  "name": "@mboss/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "mBoss MCP server — the agent control plane.",
+  "license": "MIT",
+  "engines": {
+    "node": "24.18"
+  },
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:bundle": "node src/bundle.ts",
+    "build:manifest": "UPDATE_GOLDENS=1 vitest run src/tools-manifest.test.ts",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "lint": "tsc --noEmit && eslint . && prettier --check ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "elkjs": "^0.12.0",
+    "pg": "^8.23.0",
+    "ts-morph": "^28.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@types/node": "^24.13.3",
+    "@types/pg": "^8.23.1",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.66.0",
+    "vitest": "^4.1.10",
+    "yaml": "^2.9.0"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@mboss/core": ["./mboss-core/src/index.ts"]
+    }
+  },
+  "include": [
+    "src",
+    "vitest.aliases.ts",
+    "vitest.config.ts",
+    "eslint.config.mjs"
+  ]
+}

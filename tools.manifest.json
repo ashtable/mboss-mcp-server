@@ -1,0 +1,59 @@
+{
+  "tools": [
+    {
+      "name": "project_build",
+      "title": "project.build",
+      "description": "Regenerates every workflow's code and type-checks the project."
+    },
+    {
+      "name": "project_debug",
+      "title": "project.debug",
+      "description": "Reads recent workflow runs and their steps from the project's database."
+    },
+    {
+      "name": "project_deploy",
+      "title": "project.deploy",
+      "description": "Runs the project's deploy script."
+    },
+    {
+      "name": "project_test",
+      "title": "project.test",
+      "description": "Runs the project's tests and reports what passed and what failed."
+    },
+    {
+      "name": "workflow_apply_spec",
+      "title": "workflow.apply_spec",
+      "description": "Previews a complete workflow document as a proposal, or applies one."
+    },
+    {
+      "name": "workflow_create",
+      "title": "workflow.create",
+      "description": "Creates an empty workflow draft."
+    },
+    {
+      "name": "workflow_delete_node",
+      "title": "workflow.delete_node",
+      "description": "Deletes a node and its edges, bridging the gap where that is unambiguous."
+    },
+    {
+      "name": "workflow_get",
+      "title": "workflow.get",
+      "description": "Reads a workflow document, its revision and its diagnostics."
+    },
+    {
+      "name": "workflow_rename_node",
+      "title": "workflow.rename_node",
+      "description": "Renames a node and every reference to it."
+    },
+    {
+      "name": "workflow_scaffold_step",
+      "title": "workflow.scaffold_step",
+      "description": "Writes typed handler and test stubs for a node with no code behind it."
+    },
+    {
+      "name": "workflow_validate",
+      "title": "workflow.validate",
+      "description": "Checks a workflow, or a spec not yet on disk, without changing anything."
+    }
+  ]
+}
