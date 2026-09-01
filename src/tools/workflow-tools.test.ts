@@ -714,6 +714,68 @@ describe('workflow_delete_node', () => {
     const got = await output<GetOutput>(call(workflowGet, { name: 'sample' }));
     expect(got.ir.edges).toEqual([]);
   });
+
+  /**
+   * Deleting the email a wait is waiting on leaves
+   * the wait waiting for something nobody will
+   * send. Only its author can say what should
+   * happen instead, so the delete is refused and
+   * nothing is written.
+   */
+  it('refuses to delete an email a form wait depends on', async () => {
+    const withForm = {
+      title: 'A sample',
+      nodes: [
+        {
+          id: 'start',
+          title: 'Start',
+          kind: 'trigger',
+          config: { mode: 'manual' },
+        },
+        {
+          id: 'send_form',
+          title: 'Send the form',
+          kind: 'emailSend',
+          config: {
+            to: 'someone@example.com',
+            subject: 'Please answer',
+            bodyMarkdown: 'Follow the link.',
+            attach: { type: 'form', form: { fields: [] } },
+          },
+        },
+        {
+          id: 'wait_reply',
+          title: 'Wait for the reply',
+          kind: 'durableWait',
+          config: {
+            source: { kind: 'form', email: 'send_form' },
+            onTimeout: 'abort',
+          },
+        },
+      ],
+      edges: [
+        { id: 'e1', from: { node: 'start' }, to: { node: 'send_form' } },
+        { id: 'e2', from: { node: 'send_form' }, to: { node: 'wait_reply' } },
+      ],
+    };
+
+    await createSample();
+    await applySample(withForm, 1);
+
+    const found = await failure(
+      call(workflowDeleteNode, { workflow: 'sample', nodeId: 'send_form' }),
+    );
+
+    expect(found['code']).toBe('VALIDATION_FAILED');
+    expect(found['errors']).toEqual([
+      expect.objectContaining({ code: 'V09', nodeId: 'wait_reply' }),
+    ]);
+
+    // Refused means nothing was written.
+    const got = await output<GetOutput>(call(workflowGet, { name: 'sample' }));
+    expect(got.revision).toBe(2);
+    expect(got.ir.nodes).toHaveLength(3);
+  });
 });
 
 describe('every structured error', () => {
