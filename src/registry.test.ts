@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { TOOLS } from './registry.js';
 
 /**
- * The whole tool surface, written down so a name
- * invented in passing cannot slip into the
- * registry. The workflow tools and the project
- * tools arrive in separate commits, so what is
- * asserted below is that nothing outside this
- * list is registered — the list fills in as they
- * land.
+ * The whole tool surface, written down so that
+ * neither a name invented in passing nor a tool
+ * quietly dropped can go unnoticed. The count is a
+ * product fact — the shipped skill lists these
+ * eleven and a test in this repo checks that it
+ * still does — so it is pinned rather than
+ * derived.
  */
 const THE_TOOL_SURFACE = [
   'project_build',
@@ -46,11 +46,9 @@ describe('the tool registry', () => {
     }
   });
 
-  it('registers no tool outside the eleven-tool surface', () => {
+  it('registers exactly the eleven tools', () => {
     expect(THE_TOOL_SURFACE).toHaveLength(11);
-    for (const tool of TOOLS) {
-      expect(THE_TOOL_SURFACE).toContain(tool.name);
-    }
+    expect(TOOLS.map((tool) => tool.name).sort()).toEqual(THE_TOOL_SURFACE);
   });
 
   it('has no duplicate names', () => {

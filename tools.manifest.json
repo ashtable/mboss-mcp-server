@@ -1,6 +1,26 @@
 {
   "tools": [
     {
+      "name": "project_build",
+      "title": "project.build",
+      "description": "Regenerates every workflow's code and type-checks the project."
+    },
+    {
+      "name": "project_debug",
+      "title": "project.debug",
+      "description": "Reads recent workflow runs and their steps from the project's database."
+    },
+    {
+      "name": "project_deploy",
+      "title": "project.deploy",
+      "description": "Runs the project's deploy script."
+    },
+    {
+      "name": "project_test",
+      "title": "project.test",
+      "description": "Runs the project's tests and reports what passed and what failed."
+    },
+    {
       "name": "workflow_apply_spec",
       "title": "workflow.apply_spec",
       "description": "Previews a complete workflow document as a proposal, or applies one."
