@@ -1,6 +1,7 @@
 import {
   DiagnosticSchema,
   compileProject,
+  readWorkflow,
   typecheckProject,
   type CompileResult,
   type Diagnostic,
@@ -10,6 +11,7 @@ import { z } from 'zod';
 
 import type { ToolContext } from '../project.js';
 import type { ToolDefinition } from '../registry.js';
+import { workflowNames } from '../resources/current-workflow.js';
 
 import { toolSuccess } from './result.js';
 
@@ -22,7 +24,11 @@ import { toolSuccess } from './result.js';
  * bytes on a laptop as in CI — otherwise the
  * generated code changes depending on who last
  * pressed build. A workflow that cares which zone
- * it runs in says so on its trigger.
+ * it runs in says so on its trigger, and every
+ * schedule that did not is named in `warnings`:
+ * the author is not at the build, so a zone chosen
+ * here is a decision nobody sees unless the build
+ * reports it.
  */
 const DEFAULT_TIMEZONE = 'UTC';
 
@@ -41,6 +47,14 @@ const Output = z.object({
    * back as a failure with nothing said about it.
    */
   unsupported: z.array(z.string()),
+  /**
+   * What the build decided on the author's behalf.
+   * Not a reason to stop — the project built — but
+   * the only place a choice made at build time,
+   * away from whoever drew the workflow, is said
+   * out loud.
+   */
+  warnings: z.array(z.string()),
   tscErrors: z.array(z.string()),
 });
 
@@ -88,6 +102,7 @@ async function build(ctx: ToolContext) {
       unsupported: compiled.failures.flatMap(({ name, result }) =>
         unsupportedOf(name, result),
       ),
+      warnings: [],
       tscErrors: [],
     });
   }
@@ -99,8 +114,42 @@ async function build(ctx: ToolContext) {
     codegenMs,
     diagnostics: [],
     unsupported: [],
+    warnings: await zonelessSchedules(ctx.mbossDir),
     tscErrors: checked.ok ? [] : checked.problems.map(problemLine),
   });
+}
+
+/**
+ * Every schedule that left its zone to the build.
+ *
+ * Read from the documents rather than from what
+ * was emitted, because the omission is in the
+ * document: the generated descriptor carries a
+ * zone either way, and by then there is nothing
+ * left to notice. Only worth saying once codegen
+ * ran — a build that failed emitted no schedule at
+ * all.
+ */
+async function zonelessSchedules(mbossDir: string): Promise<string[]> {
+  const warnings: string[] = [];
+
+  for (const name of workflowNames(mbossDir)) {
+    const read = await readWorkflow(mbossDir, name);
+    if (!read.ok) continue;
+
+    for (const node of read.ir.nodes) {
+      if (node.kind !== 'trigger') continue;
+      if (node.config.mode !== 'schedule') continue;
+      if (node.config.timezone !== undefined) continue;
+
+      warnings.push(
+        `${name}.${node.id}: this schedule names no timezone, ` +
+          `so it runs on ${DEFAULT_TIMEZONE}.`,
+      );
+    }
+  }
+
+  return warnings;
 }
 
 function diagnosticsOf(result: CompileResult): Diagnostic[] {
