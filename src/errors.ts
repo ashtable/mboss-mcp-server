@@ -33,6 +33,19 @@ export function toolFailure(error: ToolError): CallToolResult {
 }
 
 /**
+ * Renders a failure as a thrown error.
+ *
+ * A resource read has no second channel to put a
+ * failure in — it either answers or it does not —
+ * so the code travels in the message, as the same
+ * JSON a failed tool call carries. A caller reads
+ * it the same way either way.
+ */
+export function resourceFailure(error: ToolError): Error {
+  return new Error(JSON.stringify(error));
+}
+
+/**
  * The code carried by a failed tool result, or
  * `undefined` if the result is not a failure.
  *

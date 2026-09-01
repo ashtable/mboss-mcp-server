@@ -6,6 +6,7 @@ import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 import { toolFailure } from './errors.js';
 import { resolveProject } from './project.js';
 import { TOOLS, type ToolDefinition } from './registry.js';
+import { RESOURCES } from './resources.js';
 
 /**
  * The one file that touches the MCP SDK.
@@ -69,7 +70,7 @@ export async function runTool(
 export function createServer(cwd: string): McpServer {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {}, resources: {} } },
   );
 
   for (const tool of TOOLS) {
@@ -82,6 +83,27 @@ export function createServer(cwd: string): McpServer {
         outputSchema: tool.outputSchema,
       },
       (args) => runTool(tool, args, cwd, clientNameOf(server)),
+    );
+  }
+
+  for (const resource of RESOURCES) {
+    server.registerResource(
+      resource.name,
+      resource.uri,
+      {
+        title: resource.title,
+        description: resource.description,
+        mimeType: resource.mimeType,
+      },
+      async (uri) => ({
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: resource.mimeType,
+            text: await resource.read(cwd),
+          },
+        ],
+      }),
     );
   }
 

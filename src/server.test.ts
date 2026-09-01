@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { errorCodeOf } from './errors.js';
 import { TOOLS, type ToolDefinition } from './registry.js';
+import { RESOURCES } from './resources.js';
 import { runTool } from './server.js';
 import { buildServerBundle } from './test-support/build-server.js';
 import {
@@ -61,6 +62,19 @@ describe('the stdio server', () => {
     );
 
     return client;
+  }
+
+  /**
+   * A resource may answer with text or with bytes;
+   * every one of these answers with text.
+   */
+  function bodyOf(read: Awaited<ReturnType<Client['readResource']>>) {
+    const [content] = read.contents;
+    if (content === undefined || !('text' in content)) {
+      throw new Error('the read came back with no text');
+    }
+
+    return content;
   }
 
   it('lists its tools to a real SDK client', async () => {
@@ -167,6 +181,58 @@ describe('the stdio server', () => {
     });
 
     expect(checked.isError).toBe(true);
+  });
+
+  it('lists its resources to a real SDK client', async () => {
+    const client = await connect();
+
+    const { resources } = await client.listResources();
+
+    expect(resources.map((entry) => entry.uri)).toEqual(
+      RESOURCES.map((entry) => entry.uri),
+    );
+  });
+
+  it('reads a resource for a real SDK client', async () => {
+    const client = await connect();
+
+    const body = bodyOf(
+      await client.readResource({ uri: 'mboss://node-catalog' }),
+    );
+
+    expect(body.uri).toBe('mboss://node-catalog');
+    expect(body.mimeType).toBe('application/json');
+    expect(JSON.parse(body.text)).toHaveProperty('kinds');
+  });
+
+  it('reads this project through a resource', async () => {
+    const client = await connect();
+
+    await client.callTool({
+      name: 'workflow_create',
+      arguments: { name: 'sample' },
+    });
+    const body = bodyOf(
+      await client.readResource({ uri: 'mboss://current-workflow' }),
+    );
+
+    expect(JSON.parse(body.text)).toMatchObject({
+      name: 'sample',
+      revision: 1,
+    });
+  });
+
+  /**
+   * A resource has no result to put a coded failure
+   * in, so the read fails outright and the code has
+   * to survive in the message.
+   */
+  it('sends a failed resource read through as an error', async () => {
+    const client = await connect();
+
+    await expect(
+      client.readResource({ uri: 'mboss://current-workflow' }),
+    ).rejects.toThrow(/NO_CURRENT_WORKFLOW/);
   });
 });
 

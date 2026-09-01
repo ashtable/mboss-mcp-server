@@ -79,9 +79,14 @@ export function resolveCurrentWorkflow(
 }
 
 /**
- * Every workflow in the project, by name.
+ * Every workflow in the project, by name, sorted.
+ *
+ * Shared with the resource that reports on all of
+ * them, because running the file layout backwards
+ * is the one thing both have to do and it should
+ * only be written once.
  */
-function workflowNames(mbossDir: string): string[] {
+export function workflowNames(mbossDir: string): string[] {
   return entriesOf(workflowsDir(mbossDir))
     .filter((entry) => entry.endsWith(FILE_SUFFIX))
     .map((entry) => entry.slice(0, -FILE_SUFFIX.length))
