@@ -5,11 +5,11 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { buildBundle } from './bundle.js';
 import { errorCodeOf } from './errors.js';
 import { TOOLS, type ToolDefinition } from './registry.js';
 import { RESOURCES } from './resources.js';
 import { runTool } from './server.js';
-import { buildServerBundle } from './test-support/build-server.js';
 import {
   makeBareDirectory,
   makeFixtureProject,
@@ -27,7 +27,7 @@ describe('the stdio server', () => {
   const open: Array<{ client: Client; fixture: Fixture }> = [];
 
   beforeAll(async () => {
-    bundle = await buildServerBundle();
+    bundle = (await buildBundle()).server;
   }, 60_000);
 
   afterEach(async () => {

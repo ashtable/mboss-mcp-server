@@ -16,6 +16,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "build:bundle": "node src/bundle.ts",
     "build:manifest": "UPDATE_GOLDENS=1 vitest run src/tools-manifest.test.ts",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
