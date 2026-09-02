@@ -1,36 +1,137 @@
+import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { buildBundle, versionString, type Bundle } from './bundle.js';
+import {
+  VERSION_NAME_FILE,
+  buildBundle,
+  bundleVersion,
+  versionName,
+  versionString,
+  type Bundle,
+} from './bundle.js';
 import { TOOLS } from './registry.js';
 import {
   makeBareDirectory,
   type Fixture,
 } from './test-support/fixture-project.js';
 
+/** This checkout, which is what a build stamps. */
+const REPO_ROOT = resolve(import.meta.dirname, '..');
+
 describe('versionString', () => {
   it('names the branch and pins the build to a commit', () => {
     expect(
       versionString({
-        branch: 'mcp-server-v0.0.1',
+        name: 'mcp-server-v0.0.1',
         sha: '3b7ade2f0a1b2c3d4e5f',
-        packageVersion: '0.0.0',
       }),
     ).toBe('mcp-server-v0.0.1+3b7ade2');
   });
 
-  it('falls back to the package version without a branch', () => {
-    expect(
-      versionString({ sha: '3b7ade2f0a1b2c3d4e5f', packageVersion: '0.0.0' }),
-    ).toBe('0.0.0+3b7ade2');
+  it('is the name alone when git is unavailable', () => {
+    expect(versionString({ name: 'mcp-server-v0.0.1' })).toBe(
+      'mcp-server-v0.0.1',
+    );
+  });
+});
+
+/**
+ * The name in the file, and the one thing that can
+ * go wrong with it.
+ *
+ * A tracked file is read the same way from every
+ * checkout, which is the point of it — but it is
+ * also a thing a person updates, and the one moment
+ * they must is a release cutting the next branch.
+ * So the file is held against the branch whenever
+ * there is a branch to hold it against.
+ */
+describe('the version branch this checkout records', () => {
+  const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+  }).trim();
+
+  it('is a version branch of this repository', () => {
+    expect(versionName(REPO_ROOT)).toMatch(/^mcp-server-v\d+\.\d+\.\d+$/);
   });
 
-  it('is the package version alone when git is unavailable', () => {
-    expect(versionString({ packageVersion: '0.0.0' })).toBe('0.0.0');
+  // Detached — a submodule, or a pull request build
+  // — has no branch to disagree with.
+  it.skipIf(!/^mcp-server-v/.test(branch))(
+    'is the branch the checkout is on',
+    () => {
+      expect(versionName(REPO_ROOT)).toBe(branch);
+    },
+  );
+
+  it('refuses a name belonging to another repository', () => {
+    const dir = makeBareDirectory().dir;
+
+    writeFileSync(join(dir, VERSION_NAME_FILE), 'vscode-v0.0.1\n', 'utf8');
+
+    expect(() => versionName(dir)).toThrow('vscode-v0.0.1');
+  });
+});
+
+/**
+ * What a checkout that cannot see its own branch
+ * calls itself.
+ *
+ * This is every build of this repository that
+ * matters. A submodule is detached the moment it is
+ * checked out, so the branch reads back as `HEAD`,
+ * and the one place a name was then looked for —
+ * the environment — belongs to whichever repository
+ * the build is running for. The extension that
+ * ships this bundle compares the stamp for exact
+ * equality against what a project has vendored, so
+ * a stamp that changes with the surroundings is a
+ * false "your copy is out of date" offered to
+ * somebody whose copy is fine.
+ *
+ * A detached worktree is that state, made on
+ * purpose and reachable from here.
+ */
+describe('the version a detached checkout stamps', () => {
+  const worktrees: string[] = [];
+
+  afterAll(() => {
+    vi.unstubAllEnvs();
+
+    while (worktrees.length > 0) {
+      execFileSync('git', ['worktree', 'remove', '--force', worktrees.pop()!], {
+        cwd: REPO_ROOT,
+        stdio: 'ignore',
+      });
+    }
+  });
+
+  /** A second checkout of this commit, with no
+   *  branch on it. */
+  function detached(): string {
+    const dir = join(makeBareDirectory().dir, 'detached');
+
+    execFileSync('git', ['worktree', 'add', '--detach', dir, 'HEAD'], {
+      cwd: REPO_ROOT,
+      stdio: 'ignore',
+    });
+    worktrees.push(dir);
+
+    return dir;
+  }
+
+  it('names this repository, not the one building it', () => {
+    vi.stubEnv('GITHUB_HEAD_REF', 'vscode-v0.0.0');
+
+    expect(bundleVersion(detached())).toMatch(
+      /^mcp-server-v\d+\.\d+\.\d+\+[0-9a-f]{7}$/,
+    );
   });
 });
 
@@ -186,14 +287,16 @@ describe('the built bundle', () => {
 
   /**
    * The extension compares this against the copy it
-   * ships to offer a refresh, so it has to be one
-   * unambiguous token — an error message from git
-   * would have spaces in it.
+   * ships to offer a refresh, so it has to name
+   * this repository and this commit and nothing
+   * else. Asserted as the whole shape rather than
+   * as one unambiguous token: a token is what a
+   * stamp naming somebody else's branch also was.
    */
   it('ships a VERSION beside it', () => {
     const version = readFileSync(join(vendor(), 'VERSION'), 'utf8');
 
-    expect(version).toMatch(/^\S+\n$/);
+    expect(version).toMatch(/^mcp-server-v\d+\.\d+\.\d+\+[0-9a-f]{7}\n$/);
   });
 });
 

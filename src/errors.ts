@@ -52,6 +52,14 @@ export function resourceFailure(error: ToolError): Error {
  * The single place anything reads a code back.
  * Both channels are tried so that a client which
  * drops one of them still yields the code.
+ *
+ * Plenty of failures carry no code at all: a
+ * handler that throws comes back as one plain
+ * sentence, since the SDK turns any thrown error
+ * into a text block and nothing else. That is an
+ * answer of `undefined`, not something for this to
+ * fail on — a caller reaching for a code has
+ * already been handed the failure.
  */
 export function errorCodeOf(result: CallToolResult): string | undefined {
   if (!result.isError) return undefined;
@@ -61,7 +69,16 @@ export function errorCodeOf(result: CallToolResult): string | undefined {
 
   const [block] = result.content ?? [];
 
-  return block?.type === 'text' ? codeOf(JSON.parse(block.text)) : undefined;
+  return block?.type === 'text' ? codeOf(parsed(block.text)) : undefined;
+}
+
+/** JSON, or nothing when the text was never JSON. */
+function parsed(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 function codeOf(value: unknown): string | undefined {

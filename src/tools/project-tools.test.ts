@@ -99,6 +99,7 @@ type BuildOutput = {
   codegenMs: number;
   diagnostics: Diagnostic[];
   unsupported: string[];
+  warnings: string[];
   tscErrors: string[];
 };
 
@@ -152,6 +153,44 @@ describe('project_build', () => {
       tscErrors: [],
     });
     expect(existsSync(join(fixture.dir, 'src/workflows/index.ts'))).toBe(true);
+  });
+
+  /**
+   * The build picks the zone a schedule runs in
+   * when its trigger names none, and the author is
+   * nowhere near the build. Saying so is the whole
+   * of the remedy this tool can offer: "every day
+   * at 9" meaning nine in the morning somewhere
+   * else is not something a later step can work
+   * out.
+   */
+  it('says which schedules it gave a zone to', async () => {
+    writeWorkflow('nightly', [
+      { ...TRIGGER, config: { mode: 'schedule', cron: '0 9 * * *' } },
+    ]);
+
+    const built = await output<BuildOutput>(call(projectBuild));
+
+    expect(built.warnings).toEqual([
+      'nightly.start: this schedule names no timezone, so it runs on UTC.',
+    ]);
+  });
+
+  it('says nothing about a schedule that named its zone', async () => {
+    writeWorkflow('nightly', [
+      {
+        ...TRIGGER,
+        config: {
+          mode: 'schedule',
+          cron: '0 9 * * *',
+          timezone: 'America/Chicago',
+        },
+      },
+    ]);
+
+    const built = await output<BuildOutput>(call(projectBuild));
+
+    expect(built.warnings).toEqual([]);
   });
 
   it('surfaces type errors', async () => {

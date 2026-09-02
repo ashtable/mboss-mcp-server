@@ -142,7 +142,12 @@ function signatureOf(name: string, node: WorkflowNode): string {
   // The brace the file adds counts toward the
   // width, so it is measured here rather than
   // where the line is assembled.
-  if (`${oneLine} {`.length <= PRINT_WIDTH) return oneLine;
+  //
+  // An empty parameter list is left alone however
+  // wide the line gets: there is nothing in it to
+  // break, so prettier puts it back on one line
+  // and `prettier --check` fails on the stub.
+  if (param === '' || `${oneLine} {`.length <= PRINT_WIDTH) return oneLine;
 
   return [
     `export async function ${name}(`,
@@ -273,7 +278,11 @@ function importLine(names: string[], from: string): string {
   const sorted = [...names].sort();
   const oneLine = `import type { ${sorted.join(', ')} } from '${from}';`;
 
-  if (oneLine.length <= PRINT_WIDTH) return oneLine;
+  // One specifier stays on its line however wide
+  // it gets, the same way an empty parameter list
+  // does: prettier only breaks a list it can put
+  // more than one thing on.
+  if (sorted.length === 1 || oneLine.length <= PRINT_WIDTH) return oneLine;
 
   return [
     'import type {',
