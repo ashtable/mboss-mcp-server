@@ -287,14 +287,16 @@ describe('the built bundle', () => {
 
   /**
    * The extension compares this against the copy it
-   * ships to offer a refresh, so it has to be one
-   * unambiguous token — an error message from git
-   * would have spaces in it.
+   * ships to offer a refresh, so it has to name
+   * this repository and this commit and nothing
+   * else. Asserted as the whole shape rather than
+   * as one unambiguous token: a token is what a
+   * stamp naming somebody else's branch also was.
    */
   it('ships a VERSION beside it', () => {
     const version = readFileSync(join(vendor(), 'VERSION'), 'utf8');
 
-    expect(version).toMatch(/^\S+\n$/);
+    expect(version).toMatch(/^mcp-server-v\d+\.\d+\.\d+\+[0-9a-f]{7}\n$/);
   });
 });
 
