@@ -94,61 +94,89 @@ export async function buildBundle(): Promise<Bundle> {
 /**
  * What this build calls itself.
  *
- * The version branch is this repo's real version —
- * `package.json`'s never moves — and the commit is
- * what tells two builds of the same branch apart.
+ * The name is this repository's version branch —
+ * `package.json`'s version never moves — and the
+ * commit is what tells two builds of the same
+ * branch apart.
  */
 export function versionString({
-  branch,
+  name,
   sha,
-  packageVersion,
 }: {
-  branch?: string;
+  name: string;
   sha?: string;
-  packageVersion: string;
 }): string {
-  const name = branch ?? packageVersion;
-
   return sha === undefined ? name : `${name}+${sha.slice(0, 7)}`;
 }
 
-function bundleVersion(): string {
-  return versionString({ ...checkout(), packageVersion: packageVersion() });
+/**
+ * The line a checkout at `root` stamps its bundle
+ * with.
+ *
+ * The root is an argument so a spec can point this
+ * at a checkout other than the one it is running
+ * from — which is the only way to build the case
+ * this has to get right.
+ */
+export function bundleVersion(root: string = repoRoot): string {
+  return versionString({
+    name: versionName(root),
+    sha: git(root, 'rev-parse', 'HEAD'),
+  });
 }
+
+/** Where this repository writes down which version
+ *  branch it is. */
+export const VERSION_NAME_FILE = '.version';
+
+/** What a version branch of this repository is
+ *  called. */
+const VERSION_BRANCH = /^mcp-server-v\d+\.\d+\.\d+$/;
 
 /**
- * What git says about this checkout, if anything.
+ * The version branch this checkout is on, as the
+ * checkout itself records it.
  *
- * A build from a tarball has no git at all, and a
- * build of a pull request has a detached HEAD whose
- * branch reads back as `HEAD` — the name is in the
- * environment there instead.
+ * Tracked in a file rather than asked of git,
+ * because the build that has to get this right is
+ * the one another repository runs over this one as
+ * its submodule — and a submodule is detached from
+ * the moment it is checked out, so there is no
+ * branch on it to read. The environment does name a
+ * branch there, but it is the branch of whichever
+ * repository the build is running for, which is how
+ * this bundle came to stamp itself with the
+ * extension's version.
+ *
+ * A file travels with the checkout instead, so two
+ * builds of one commit are stamped the same however
+ * they were started — which is the whole of what
+ * the extension's comparison rests on.
  */
-function checkout(): { branch?: string; sha?: string } {
-  const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
-  const named = branch === 'HEAD' ? process.env.GITHUB_HEAD_REF : branch;
+export function versionName(root: string = repoRoot): string {
+  const path = resolve(root, VERSION_NAME_FILE);
+  const name = readFileSync(path, 'utf8').trim();
 
-  return { branch: named, sha: git('rev-parse', 'HEAD') };
+  if (!VERSION_BRANCH.test(name)) {
+    throw new Error(
+      `${path} says \`${name}\`, which is not a version branch ` +
+        'of this repository',
+    );
+  }
+
+  return name;
 }
 
-function git(...args: string[]): string | undefined {
+function git(root: string, ...args: string[]): string | undefined {
   try {
     return execFileSync('git', args, {
-      cwd: repoRoot,
+      cwd: root,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch {
     return undefined;
   }
-}
-
-function packageVersion(): string {
-  const manifest = JSON.parse(
-    readFileSync(resolve(repoRoot, 'package.json'), 'utf8'),
-  ) as { version: string };
-
-  return manifest.version;
 }
 
 /**
