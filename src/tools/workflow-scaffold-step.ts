@@ -136,7 +136,7 @@ async function scaffold(args: z.infer<typeof Input>, ctx: ToolContext) {
  */
 function signatureOf(name: string, node: WorkflowNode): string {
   const param = node.in === undefined ? '' : `input: ${node.in}`;
-  const returns = `Promise<${node.out ?? 'void'}>`;
+  const returns = `Promise<${answerOf(node)}>`;
   const oneLine = `export async function ${name}(${param}): ${returns}`;
 
   // The brace the file adds counts toward the
@@ -154,6 +154,44 @@ function signatureOf(name: string, node: WorkflowNode): string {
     ...(param === '' ? [] : [`  ${param},`]),
     `): ${returns}`,
   ].join('\n');
+}
+
+/**
+ * What the handler answers with.
+ *
+ * A branch is the one block that does not say: it
+ * declares no `out`, because nothing downstream may
+ * read what it decided. Its cases say instead —
+ * each one matches an answer, and the run leaves by
+ * the port of the case that matched — so the answer
+ * is the set of values they match between them.
+ */
+function answerOf(node: WorkflowNode): string {
+  if (node.kind !== 'branch') return node.out ?? 'void';
+
+  const values = node.config.cases.map((each) => each.when.value);
+
+  // `boolean` rather than `true | false`: the same
+  // type, and the one a person writes.
+  if (values.length === 2 && values.includes(true) && values.includes(false)) {
+    return 'boolean';
+  }
+
+  return values.map(literalType).join(' | ');
+}
+
+/**
+ * A case's value written as a type. Strings are
+ * quoted the way the projects this writes into
+ * format them; a case matching something a decision
+ * cannot be gets named all the same, so the
+ * compiler says so in front of the author rather
+ * than the stub quietly claiming otherwise.
+ */
+function literalType(value: unknown): string {
+  if (typeof value === 'string') return `'${value.replaceAll("'", "\\'")}'`;
+
+  return JSON.stringify(value) ?? 'undefined';
 }
 
 type StubParts = {

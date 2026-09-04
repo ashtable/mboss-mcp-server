@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -135,6 +135,48 @@ const BROKEN_DRAFT = {
   edges: [
     ...DRAFT.edges,
     { id: 'e2', from: { node: 'work' }, to: { node: 'nowhere' } },
+  ],
+};
+
+/**
+ * A form going out and a wait for the answer. The
+ * wait names the email it is waiting on, which is
+ * the one reference to a node that no edge
+ * carries.
+ */
+const FORM_DRAFT = {
+  title: 'A sample',
+  nodes: [
+    {
+      id: 'start',
+      title: 'Start',
+      kind: 'trigger',
+      config: { mode: 'manual' },
+    },
+    {
+      id: 'send_form',
+      title: 'Send the form',
+      kind: 'emailSend',
+      config: {
+        to: 'someone@example.com',
+        subject: 'Please answer',
+        bodyMarkdown: 'Follow the link.',
+        attach: { type: 'form', form: { fields: [] } },
+      },
+    },
+    {
+      id: 'wait_reply',
+      title: 'Wait for the reply',
+      kind: 'durableWait',
+      config: {
+        source: { kind: 'form', email: 'send_form' },
+        onTimeout: 'abort',
+      },
+    },
+  ],
+  edges: [
+    { id: 'e1', from: { node: 'start' }, to: { node: 'send_form' } },
+    { id: 'e2', from: { node: 'send_form' }, to: { node: 'wait_reply' } },
   ],
 };
 
@@ -515,6 +557,21 @@ describe('workflow_scaffold_step', () => {
     });
   }
 
+  /** Where the stub for an export lands. */
+  function handlerAt(exported: string): string {
+    return join(fixture.dir, 'lib', `${exported}.ts`);
+  }
+
+  /** Every code validation reports about the sample. */
+  async function codesReported(): Promise<string[]> {
+    const checked = await output<{
+      errors: Diagnostic[];
+      warnings: Diagnostic[];
+    }>(call(workflowValidate, { name: 'sample' }));
+
+    return [...checked.errors, ...checked.warnings].map((each) => each.code);
+  }
+
   it('writes a typed handler stub and its test', async () => {
     await withTypedDraft();
 
@@ -708,6 +765,100 @@ describe('workflow_scaffold_step', () => {
     expect(written).toContain('`Booking` is not exported from `lib/` yet.');
   });
 
+  /**
+   * The sample with a deciding branch where the
+   * step was.
+   *
+   * A branch with a handler runs it as a step and
+   * tests what it returns, so what the stub answers
+   * with is the set of values its cases match — the
+   * node declares no `out` for one.
+   */
+  function decidingDraft(node: object): object {
+    return {
+      ...TYPED_DRAFT,
+      nodes: [
+        TYPED_DRAFT.nodes[0],
+        {
+          id: 'ready',
+          title: 'Ready?',
+          kind: 'branch',
+          ...node,
+        },
+      ],
+      edges: [{ id: 'e1', from: { node: 'start' }, to: { node: 'ready' } }],
+    };
+  }
+
+  it('types a decision between true and false as a boolean', async () => {
+    await createSample();
+    await applySample(
+      decidingDraft({
+        config: {
+          cases: [
+            { port: 'yes', when: { path: '', op: 'eq', value: true } },
+            { port: 'no', when: { path: '', op: 'eq', value: false } },
+          ],
+          elsePort: 'else',
+        },
+        handler: { export: 'isReady' },
+      }),
+      1,
+    );
+
+    // Nothing exports the handler yet.
+    expect(await codesReported()).toEqual(['V07']);
+
+    const scaffolded = await output<ScaffoldOutput>(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'ready' }),
+    );
+    const written = readFileSync(handlerAt('isReady'), 'utf8');
+
+    expect(scaffolded.created[0]?.signature).toBe(
+      'export async function isReady(): Promise<boolean>',
+    );
+    expect(await formatted(written)).toBe(written);
+    expect(await codesReported()).toEqual([]);
+  });
+
+  it('types a decision between strings as the union of them', async () => {
+    await mkdir(join(fixture.dir, 'lib'), { recursive: true });
+    writeFileSync(
+      join(fixture.dir, 'lib', 'types.ts'),
+      'export type Booking = { id: string };\n',
+      'utf8',
+    );
+
+    await createSample();
+    await applySample(
+      decidingDraft({
+        in: 'Booking',
+        config: {
+          cases: [
+            { port: 'yes', when: { path: '', op: 'eq', value: 'yes' } },
+            { port: 'no', when: { path: '', op: 'eq', value: 'no' } },
+            { port: 'later', when: { path: '', op: 'eq', value: 'later' } },
+          ],
+          elsePort: 'else',
+        },
+        handler: { export: 'triage' },
+      }),
+      1,
+    );
+
+    const scaffolded = await output<ScaffoldOutput>(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'ready' }),
+    );
+    const written = readFileSync(handlerAt('triage'), 'utf8');
+
+    expect(scaffolded.created[0]?.signature).toBe(
+      'export async function triage(input: Booking): ' +
+        "Promise<'yes' | 'no' | 'later'>",
+    );
+    expect(await formatted(written)).toBe(written);
+    expect(await codesReported()).toEqual([]);
+  });
+
   it('refuses a node with no handler to scaffold', async () => {
     await createSample();
     await applySample(DRAFT, 1);
@@ -715,6 +866,29 @@ describe('workflow_scaffold_step', () => {
     await expect(
       call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'work' }),
     ).rejects.toThrow(/handler/);
+  });
+});
+
+/**
+ * The canvas makes the same edits these tools do,
+ * so both reach one implementation in
+ * `@mboss/core`. A copy kept here would pass every
+ * test in this repository and still let an agent's
+ * rename and a person's rename come to mean
+ * different things.
+ */
+describe('the graph edits', () => {
+  it('are declared in core rather than here', () => {
+    const src = join(import.meta.dirname, '..');
+    const declaring = readdirSync(src, { recursive: true, encoding: 'utf8' })
+      .filter((entry) => entry.endsWith('.ts'))
+      .filter((entry) =>
+        /export function (renameNode|deleteNode|nextEdgeId)\b/.test(
+          readFileSync(join(src, entry), 'utf8'),
+        ),
+      );
+
+    expect(declaring).toEqual([]);
   });
 });
 
@@ -749,6 +923,33 @@ describe('workflow_rename_node', () => {
       'finish',
     ]);
     expect(got.ir.edges[1]?.from.node).toBe('middle');
+  });
+
+  /**
+   * A form wait names the email it is waiting on,
+   * and no edge carries that. Chasing it is the
+   * shared edit's work, so a rename that leaves the
+   * wait behind means the tool has stopped calling
+   * it.
+   */
+  it('moves a form wait onto the renamed email', async () => {
+    await createSample();
+    await applySample(FORM_DRAFT, 1);
+
+    const renamed = await output<EditOutput>(
+      call(workflowRenameNode, {
+        workflow: 'sample',
+        nodeId: 'send_form',
+        newId: 'invite',
+      }),
+    );
+
+    expect(renamed.updatedReferences).toBe(3);
+
+    const got = await output<GetOutput>(call(workflowGet, { name: 'sample' }));
+    const wait = got.ir.nodes.find((node) => node.id === 'wait_reply');
+
+    expect(wait?.config).toMatchObject({ source: { email: 'invite' } });
   });
 
   it('refuses a node that is not in the workflow', async () => {
@@ -828,44 +1029,8 @@ describe('workflow_delete_node', () => {
    * nothing is written.
    */
   it('refuses to delete an email a form wait depends on', async () => {
-    const withForm = {
-      title: 'A sample',
-      nodes: [
-        {
-          id: 'start',
-          title: 'Start',
-          kind: 'trigger',
-          config: { mode: 'manual' },
-        },
-        {
-          id: 'send_form',
-          title: 'Send the form',
-          kind: 'emailSend',
-          config: {
-            to: 'someone@example.com',
-            subject: 'Please answer',
-            bodyMarkdown: 'Follow the link.',
-            attach: { type: 'form', form: { fields: [] } },
-          },
-        },
-        {
-          id: 'wait_reply',
-          title: 'Wait for the reply',
-          kind: 'durableWait',
-          config: {
-            source: { kind: 'form', email: 'send_form' },
-            onTimeout: 'abort',
-          },
-        },
-      ],
-      edges: [
-        { id: 'e1', from: { node: 'start' }, to: { node: 'send_form' } },
-        { id: 'e2', from: { node: 'send_form' }, to: { node: 'wait_reply' } },
-      ],
-    };
-
     await createSample();
-    await applySample(withForm, 1);
+    await applySample(FORM_DRAFT, 1);
 
     const found = await failure(
       call(workflowDeleteNode, { workflow: 'sample', nodeId: 'send_form' }),

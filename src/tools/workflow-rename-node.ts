@@ -3,6 +3,7 @@ import {
   WorkflowNameSchema,
   applySpec,
   readWorkflow,
+  renameNode,
 } from '@mboss/core';
 import { z } from 'zod';
 
@@ -10,7 +11,6 @@ import { toolFailure } from '../errors.js';
 import type { ToolContext } from '../project.js';
 import type { ToolDefinition } from '../registry.js';
 
-import { renameNode } from './graph-edit.js';
 import { toolSuccess } from './result.js';
 import { libManifest, specOf } from './workflow.js';
 
