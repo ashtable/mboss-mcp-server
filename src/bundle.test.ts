@@ -274,6 +274,68 @@ describe('the built bundle', () => {
   });
 
   /**
+   * Renaming and deleting a node are core's edits
+   * now, not this repository's, so what a caller
+   * sees of them is the one thing the swap could
+   * have changed. The answer lives in the shipped
+   * file, so the question is put to it — over
+   * stdio, by a client that knows only the tools.
+   */
+  it('renames and deletes a node from a real client', async () => {
+    const dir = vendor();
+    mkdirSync(join(dir, '.mboss', 'workflows'), { recursive: true });
+    const client = await connect(dir);
+
+    await client.callTool({
+      name: 'workflow_create',
+      arguments: { name: 'sample' },
+    });
+    await client.callTool({
+      name: 'workflow_apply_spec',
+      arguments: {
+        name: 'sample',
+        spec: THREE_BLOCK_DRAFT,
+        dryRun: false,
+        baseRevision: 1,
+      },
+    });
+
+    const renamed = await client.callTool({
+      name: 'workflow_rename_node',
+      arguments: { workflow: 'sample', nodeId: 'work', newId: 'middle' },
+    });
+
+    // Both edges the renamed block sat between.
+    expect(renamed.structuredContent).toMatchObject({
+      applied: true,
+      updatedReferences: 2,
+    });
+
+    const deleted = await client.callTool({
+      name: 'workflow_delete_node',
+      arguments: { workflow: 'sample', nodeId: 'middle' },
+    });
+
+    // Its two edges gone and the gap bridged.
+    expect(deleted.structuredContent).toMatchObject({
+      applied: true,
+      removedEdges: ['e1', 'e2'],
+      bridgedEdge: 'e3',
+    });
+
+    const got = await client.callTool({
+      name: 'workflow_get',
+      arguments: { name: 'sample' },
+    });
+    const { ir } = got.structuredContent as {
+      ir: { nodes: { id: string }[]; edges: { to: { node: string } }[] };
+    };
+
+    expect(ir.nodes.map((node) => node.id)).toEqual(['start', 'finish']);
+    expect(ir.edges.map((edge) => edge.to.node)).toEqual(['finish']);
+  });
+
+  /**
    * A path baked in at build time would resolve to
    * nothing on the machine that runs the bundle,
    * and the failure would come much later than
@@ -299,6 +361,25 @@ describe('the built bundle', () => {
     expect(version).toMatch(/^mcp-server-v\d+\.\d+\.\d+\+[0-9a-f]{7}\n$/);
   });
 });
+
+/** A chain with a block in the middle to edit. */
+const THREE_BLOCK_DRAFT = {
+  title: 'A sample',
+  nodes: [
+    {
+      id: 'start',
+      title: 'Start',
+      kind: 'trigger',
+      config: { mode: 'manual' },
+    },
+    { id: 'work', title: 'Work', kind: 'step', config: {} },
+    { id: 'finish', title: 'Finish', kind: 'step', config: {} },
+  ],
+  edges: [
+    { id: 'e1', from: { node: 'start' }, to: { node: 'work' } },
+    { id: 'e2', from: { node: 'work' }, to: { node: 'finish' } },
+  ],
+};
 
 /** A workflow with one handler left to write. */
 const TYPED_DRAFT = {
