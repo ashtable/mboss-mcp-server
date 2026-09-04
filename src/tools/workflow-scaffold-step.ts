@@ -127,37 +127,72 @@ async function scaffold(args: z.infer<typeof Input>, ctx: ToolContext) {
 }
 
 /**
- * The declaration the stub opens with.
+ * The declaration the stub opens with, wrapped the
+ * way prettier wraps it.
  *
  * A block that takes nothing has no parameter, and
  * one that produces nothing returns `void` — both
  * are ordinary, since a step may exist only for
  * what it does elsewhere.
+ *
+ * Prettier breaks the parameter list first and
+ * stops there when that was enough, then breaks the
+ * answer, and leaves a line it has no way to break
+ * as long as it is. Following it in that order is
+ * what keeps the stub from arriving already failing
+ * the project's `prettier --check`.
  */
 function signatureOf(name: string, node: WorkflowNode): string {
   const param = node.in === undefined ? '' : `input: ${node.in}`;
-  const returns = `Promise<${answerOf(node)}>`;
-  const oneLine = `export async function ${name}(${param}): ${returns}`;
+  const answer = answerOf(node);
+  const returns = `Promise<${answer.join(' | ')}>`;
 
   // The brace the file adds counts toward the
   // width, so it is measured here rather than
   // where the line is assembled.
-  //
-  // An empty parameter list is left alone however
-  // wide the line gets: there is nothing in it to
-  // break, so prettier puts it back on one line
-  // and `prettier --check` fails on the stub.
-  if (param === '' || `${oneLine} {`.length <= PRINT_WIDTH) return oneLine;
+  const oneLine = `export async function ${name}(${param}): ${returns}`;
+  if (fits(`${oneLine} {`)) return oneLine;
 
-  return [
-    `export async function ${name}(`,
-    ...(param === '' ? [] : [`  ${param},`]),
-    `): ${returns}`,
-  ].join('\n');
+  // An empty parameter list has nothing in it to
+  // break, so it stays as it is however wide the
+  // line gets.
+  const opened =
+    param === ''
+      ? `export async function ${name}()`
+      : [`export async function ${name}(`, `  ${param},`, ')'].join('\n');
+  const broken = `${opened}: ${returns}`;
+
+  if (param !== '' && fits(`): ${returns} {`)) return broken;
+
+  // A single name is the other thing with nothing
+  // in it to break — only a union of more than one
+  // member has members to put on lines of their
+  // own.
+  if (answer.length === 1) return broken;
+
+  return `${opened}: Promise<\n${union(answer)}\n>`;
 }
 
 /**
- * What the handler answers with.
+ * A union on the line it broke onto: all of it
+ * there when it fits, and a member per line with
+ * its bar when it does not.
+ */
+function union(members: string[]): string {
+  const oneLine = `  ${members.join(' | ')}`;
+
+  return fits(oneLine)
+    ? oneLine
+    : members.map((member) => `  | ${member}`).join('\n');
+}
+
+function fits(line: string): boolean {
+  return line.length <= PRINT_WIDTH;
+}
+
+/**
+ * What the handler answers with, as the members of
+ * the type it returns.
  *
  * A branch is the one block that does not say: it
  * declares no `out`, because nothing downstream may
@@ -166,18 +201,21 @@ function signatureOf(name: string, node: WorkflowNode): string {
  * the port of the case that matched — so the answer
  * is the set of values they match between them.
  */
-function answerOf(node: WorkflowNode): string {
-  if (node.kind !== 'branch') return node.out ?? 'void';
+function answerOf(node: WorkflowNode): string[] {
+  if (node.kind !== 'branch') return [node.out ?? 'void'];
 
   const values = node.config.cases.map((each) => each.when.value);
 
-  // `boolean` rather than `true | false`: the same
-  // type, and the one a person writes.
-  if (values.length === 2 && values.includes(true) && values.includes(false)) {
-    return 'boolean';
-  }
+  // `boolean` whenever the cases are booleans, not
+  // just when both of them are there. A decision is
+  // read back as a boolean or as a set of strings,
+  // and nothing else, so a stub typed `true` makes
+  // the code this just wrote the thing at fault
+  // where the missing case for `false` is the real
+  // finding.
+  if (values.every((value) => typeof value === 'boolean')) return ['boolean'];
 
-  return values.map(literalType).join(' | ');
+  return values.map(literalType);
 }
 
 /**
@@ -320,7 +358,7 @@ function importLine(names: string[], from: string): string {
   // it gets, the same way an empty parameter list
   // does: prettier only breaks a list it can put
   // more than one thing on.
-  if (sorted.length === 1 || oneLine.length <= PRINT_WIDTH) return oneLine;
+  if (sorted.length === 1 || fits(oneLine)) return oneLine;
 
   return [
     'import type {',

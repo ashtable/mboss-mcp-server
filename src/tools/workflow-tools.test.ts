@@ -859,6 +859,150 @@ describe('workflow_scaffold_step', () => {
     expect(await codesReported()).toEqual([]);
   });
 
+  /**
+   * The three answers below leave the declaration
+   * past 80 columns with nothing in its parameter
+   * list to break, so prettier breaks the answer
+   * instead. A stub written any other way arrives
+   * failing the project's own `prettier --check`.
+   */
+  it('breaks a wide answer the way prettier breaks it', async () => {
+    await createSample();
+    await applySample(
+      decidingDraft({
+        config: {
+          cases: [
+            { port: 'yes', when: { path: '', op: 'eq', value: 'approved' } },
+            { port: 'no', when: { path: '', op: 'eq', value: 'rejected' } },
+            {
+              port: 'more',
+              when: { path: '', op: 'eq', value: 'needs_more_information' },
+            },
+          ],
+          elsePort: 'else',
+        },
+        handler: { export: 'triageTheIncoming' },
+      }),
+      1,
+    );
+
+    const scaffolded = await output<ScaffoldOutput>(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'ready' }),
+    );
+    const written = readFileSync(handlerAt('triageTheIncoming'), 'utf8');
+
+    expect(scaffolded.created[0]?.signature).toBe(
+      'export async function triageTheIncoming(): Promise<\n' +
+        "  'approved' | 'rejected' | 'needs_more_information'\n" +
+        '>',
+    );
+    expect(await formatted(written)).toBe(written);
+    expect(await codesReported()).toEqual([]);
+  });
+
+  /**
+   * The same thing one step further along: the
+   * parameter list breaks, and the line that leaves
+   * behind is still too wide, so the answer breaks
+   * too — and then the answer itself does not fit
+   * on one line of its own.
+   */
+  it('breaks a wide answer under a broken parameter list', async () => {
+    await mkdir(join(fixture.dir, 'lib'), { recursive: true });
+    writeFileSync(
+      join(fixture.dir, 'lib', 'types.ts'),
+      'export type Booking = { id: string };\n',
+      'utf8',
+    );
+
+    await createSample();
+    await applySample(
+      decidingDraft({
+        in: 'Booking',
+        config: {
+          cases: [
+            {
+              port: 'yes',
+              when: { path: '', op: 'eq', value: 'approved_by_the_desk' },
+            },
+            {
+              port: 'no',
+              when: { path: '', op: 'eq', value: 'rejected_by_the_desk' },
+            },
+            {
+              port: 'more',
+              when: { path: '', op: 'eq', value: 'needs_more_information' },
+            },
+            {
+              port: 'human',
+              when: { path: '', op: 'eq', value: 'escalated_to_a_human' },
+            },
+          ],
+          elsePort: 'else',
+        },
+        handler: { export: 'triageTheIncoming' },
+      }),
+      1,
+    );
+
+    const scaffolded = await output<ScaffoldOutput>(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'ready' }),
+    );
+    const written = readFileSync(handlerAt('triageTheIncoming'), 'utf8');
+
+    expect(scaffolded.created[0]?.signature).toBe(
+      'export async function triageTheIncoming(\n' +
+        '  input: Booking,\n' +
+        '): Promise<\n' +
+        "  | 'approved_by_the_desk'\n" +
+        "  | 'rejected_by_the_desk'\n" +
+        "  | 'needs_more_information'\n" +
+        "  | 'escalated_to_a_human'\n" +
+        '>',
+    );
+    expect(await formatted(written)).toBe(written);
+    expect(await codesReported()).toEqual([]);
+  });
+
+  /**
+   * A branch that decides a boolean and draws only
+   * one of the two answers out.
+   *
+   * The stub still answers `boolean`, because that
+   * is what a decision is read out of. Typed
+   * `Promise<true>` instead, the code this tool
+   * just wrote becomes the thing the validator
+   * blames, in place of the case the branch is
+   * actually missing.
+   */
+  it('types a decision on booleans as a boolean', async () => {
+    await createSample();
+    await applySample(
+      decidingDraft({
+        config: {
+          cases: [{ port: 'yes', when: { path: '', op: 'eq', value: true } }],
+          elsePort: 'no',
+        },
+        handler: { export: 'tryAgain' },
+      }),
+      1,
+    );
+
+    const scaffolded = await output<ScaffoldOutput>(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'ready' }),
+    );
+    const checked = await output<{ errors: Diagnostic[] }>(
+      call(workflowValidate, { name: 'sample' }),
+    );
+
+    expect(scaffolded.created[0]?.signature).toBe(
+      'export async function tryAgain(): Promise<boolean>',
+    );
+    expect(checked.errors.map((each) => each.message)).toEqual([
+      expect.stringContaining('can decide `false`'),
+    ]);
+  });
+
   it('refuses a node with no handler to scaffold', async () => {
     await createSample();
     await applySample(DRAFT, 1);
