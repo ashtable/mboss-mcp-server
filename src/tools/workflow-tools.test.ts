@@ -498,6 +498,88 @@ describe('workflow_validate', () => {
       call(workflowValidate, { name: 'sample', spec: DRAFT }),
     ).rejects.toThrow(/one of/);
   });
+
+  /**
+   * The pairing below is the one an agent must be
+   * told about here, because the canvas already
+   * refuses it: the picker greys a function that
+   * calls out when the block is a transaction. A
+   * server that stayed quiet would let an agent
+   * write the exact assignment a person is then
+   * unable to make by hand.
+   */
+  const CHARGE_CARD = [
+    'export async function chargeCard(claim: string): Promise<void> {',
+    '  await fetch(`https://payments.example.com/${claim}`);',
+    '}',
+    '',
+  ].join('\n');
+
+  const CHARGING_TRANSACTION = {
+    title: 'A sample',
+    nodes: [
+      {
+        id: 'start',
+        title: 'Start',
+        kind: 'trigger',
+        config: { mode: 'manual' },
+      },
+      {
+        id: 'pay_claim',
+        title: 'Pay the claim',
+        kind: 'transaction',
+        handler: { export: 'chargeCard' },
+        config: {},
+      },
+    ],
+    edges: [{ id: 'e1', from: { node: 'start' }, to: { node: 'pay_claim' } }],
+  };
+
+  it('reports a transaction whose handler calls out', async () => {
+    await mkdir(join(fixture.dir, 'lib'), { recursive: true });
+    writeFileSync(
+      join(fixture.dir, 'lib', 'chargeCard.ts'),
+      CHARGE_CARD,
+      'utf8',
+    );
+
+    const checked = await output<ApplyOutput>(
+      call(workflowValidate, { spec: CHARGING_TRANSACTION }),
+    );
+    const found = checked.errors.find((each) => each.code === 'V16');
+
+    expect(checked.valid).toBe(false);
+    expect(found?.nodeId).toBe('pay_claim');
+    // The call and where to find it, and no
+    // mention of the global it came from: its own
+    // name is the whole story.
+    expect(found?.message).toContain('`chargeCard` calls `fetch`');
+    expect(found?.message).toContain('lib/chargeCard.ts:2');
+    expect(found?.message).not.toContain('globalThis');
+  });
+
+  it('leaves the same handler alone behind a step', async () => {
+    await mkdir(join(fixture.dir, 'lib'), { recursive: true });
+    writeFileSync(
+      join(fixture.dir, 'lib', 'chargeCard.ts'),
+      CHARGE_CARD,
+      'utf8',
+    );
+
+    const checked = await output<ApplyOutput>(
+      call(workflowValidate, {
+        spec: {
+          ...CHARGING_TRANSACTION,
+          nodes: [
+            CHARGING_TRANSACTION.nodes[0],
+            { ...CHARGING_TRANSACTION.nodes[1], kind: 'step' },
+          ],
+        },
+      }),
+    );
+
+    expect(checked.errors).toEqual([]);
+  });
 });
 
 describe('workflow_scaffold_step', () => {
