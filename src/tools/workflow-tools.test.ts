@@ -558,6 +558,55 @@ describe('workflow_validate', () => {
     expect(found?.message).not.toContain('globalThis');
   });
 
+  /**
+   * The same dial-out with the socket built on the
+   * line that calls it. The canvas greys this
+   * handler exactly as it greys the one above, so a
+   * server that reported only the named-socket
+   * spelling would disagree with the picker over
+   * two files that run the same code.
+   */
+  const RESERVE_PORT = [
+    "import { Socket } from 'node:net';",
+    '',
+    'export async function reservePort(port: number): Promise<void> {',
+    '  new Socket().connect(port);',
+    '}',
+    '',
+  ].join('\n');
+
+  it('reports a dial-out on a socket built on the same line', async () => {
+    await mkdir(join(fixture.dir, 'lib'), { recursive: true });
+    writeFileSync(
+      join(fixture.dir, 'lib', 'reservePort.ts'),
+      RESERVE_PORT,
+      'utf8',
+    );
+
+    const checked = await output<ApplyOutput>(
+      call(workflowValidate, {
+        spec: {
+          ...CHARGING_TRANSACTION,
+          nodes: [
+            CHARGING_TRANSACTION.nodes[0],
+            {
+              ...CHARGING_TRANSACTION.nodes[1],
+              handler: { export: 'reservePort' },
+            },
+          ],
+        },
+      }),
+    );
+    const found = checked.errors.find((each) => each.code === 'V16');
+
+    expect(checked.valid).toBe(false);
+    expect(found?.nodeId).toBe('pay_claim');
+    expect(found?.message).toContain(
+      '`reservePort` calls `new Socket().connect` from `node:net`',
+    );
+    expect(found?.message).toContain('lib/reservePort.ts:4');
+  });
+
   it('leaves the same handler alone behind a step', async () => {
     await mkdir(join(fixture.dir, 'lib'), { recursive: true });
     writeFileSync(
