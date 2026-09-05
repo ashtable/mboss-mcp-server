@@ -25,13 +25,12 @@ const SKILLS_ROOT = resolve(
 const SKILL_PATH = resolve(SKILLS_ROOT, 'SKILL.md');
 const TOOLS_REFERENCE_PATH = resolve(SKILLS_ROOT, 'references', 'tools.md');
 const IR_EXAMPLES_PATH = resolve(SKILLS_ROOT, 'references', 'ir-examples.md');
-const CORE_FIXTURE_PATH = resolve(
+const CORE_FIXTURES = resolve(
   import.meta.dirname,
   '..',
   'mboss-core',
   'fixtures',
   'ir',
-  'groom_booking.workflow.json',
 );
 
 /**
@@ -102,18 +101,44 @@ describe('the skill matches the tool surface', () => {
       expect(description).toBe(manifestDescriptions.get(name));
     });
   });
+});
 
-  // This repo is the only one nesting both mboss-core
-  // and mboss-skills, so it is the only place this
-  // copy can be checked at all. The fixture file
-  // carries a trailing newline that a fenced block
-  // cannot represent, so that one byte is the only
-  // normalization allowed here.
-  it("embeds core's groom_booking fixture byte for byte", () => {
-    const irExamplesText = readFileSync(IR_EXAMPLES_PATH, 'utf8');
-    const embedded = irExamplesText.match(/```json\n([\s\S]*?)\n```/)?.[1];
-    const coreFixture = readFileSync(CORE_FIXTURE_PATH, 'utf8');
+/**
+ * The documents the skill teaches by, held against
+ * the fixtures core compiles.
+ *
+ * This repository is the only one nesting both
+ * mboss-core and mboss-skills, so it is the only
+ * place these copies can be compared at all. Each
+ * example names the fixture it was taken from, and
+ * a fixture file carries a trailing newline a
+ * fenced block cannot represent — that one byte is
+ * the only normalization allowed here.
+ */
+describe('the worked IR examples', () => {
+  const examples = [
+    ...readFileSync(IR_EXAMPLES_PATH, 'utf8').matchAll(
+      /```json\n([\s\S]*?)\n```/g,
+    ),
+  ].map((match) => {
+    const document = match[1]!;
 
-    expect(embedded).toBe(coreFixture.replace(/\n$/, ''));
+    return { document, name: (JSON.parse(document) as { name: string }).name };
   });
+
+  it('teach by more than one document', () => {
+    expect(examples.length).toBeGreaterThan(1);
+  });
+
+  it.each(examples)(
+    "embed core's $name fixture byte for byte",
+    ({ document, name }) => {
+      const fixture = readFileSync(
+        resolve(CORE_FIXTURES, `${name}.workflow.json`),
+        'utf8',
+      );
+
+      expect(document).toBe(fixture.replace(/\n$/, ''));
+    },
+  );
 });

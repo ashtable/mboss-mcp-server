@@ -2,6 +2,7 @@ import {
   NodeIdSchema,
   WorkflowNameSchema,
   applySpec,
+  deleteNode,
   readWorkflow,
 } from '@mboss/core';
 import { z } from 'zod';
@@ -10,7 +11,6 @@ import { toolFailure } from '../errors.js';
 import type { ToolContext } from '../project.js';
 import type { ToolDefinition } from '../registry.js';
 
-import { deleteNode } from './graph-edit.js';
 import { toolSuccess } from './result.js';
 import { libManifest, specOf } from './workflow.js';
 

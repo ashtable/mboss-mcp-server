@@ -1,7 +1,7 @@
 import { mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { workflowFile, type Diagnostic } from '@mboss/core';
+import { NODE_PALETTE, workflowFile, type Diagnostic } from '@mboss/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { RESOURCES, type ResourceDefinition } from './resources.js';
@@ -112,6 +112,26 @@ describe('the resource surface', () => {
 
 describe('the schema resources', () => {
   /**
+   * Just enough of the served document schema to
+   * reach a node's own fields: an array of nodes,
+   * one union branch per kind.
+   */
+  type DocumentSchema = {
+    properties: {
+      nodes: {
+        items: {
+          oneOf: Array<{
+            properties: Record<
+              string,
+              { const?: string; properties?: object } | undefined
+            >;
+          }>;
+        };
+      };
+    };
+  };
+
+  /**
    * The catalog is what a kind is, not what this
    * project has, so an agent reading it before
    * there is a project to read is the ordinary
@@ -139,6 +159,35 @@ describe('the schema resources', () => {
     );
 
     expect(Object.keys(schema.properties ?? {})).toContain('nodes');
+  });
+
+  /**
+   * Both documents are rendered from the schemas
+   * core owns rather than written out here, so a
+   * field core grows reaches an agent with nothing
+   * added on this side. `position` is the one that
+   * just did, and it has to be offered for every
+   * kind: a person can move any node.
+   */
+  it('show that a node of any kind may carry a position', async () => {
+    const bare = makeBareDirectory();
+    spare.push(bare);
+
+    const schema = await readJson<DocumentSchema>(
+      'mboss://workflow-schema',
+      bare.dir,
+    );
+    const nodes = schema.properties.nodes.items.oneOf;
+
+    expect(nodes).toHaveLength(NODE_PALETTE.length);
+    for (const node of nodes) {
+      const kind = node.properties['kind']?.const;
+
+      expect(
+        Object.keys(node.properties['position']?.properties ?? {}),
+        kind,
+      ).toEqual(['x', 'y']);
+    }
   });
 });
 
