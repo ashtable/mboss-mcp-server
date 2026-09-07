@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -31,6 +31,28 @@ const CORE_FIXTURES = resolve(
   'mboss-core',
   'fixtures',
   'ir',
+);
+const CORE_LIBRARY = resolve(
+  import.meta.dirname,
+  '..',
+  'mboss-core',
+  'src',
+  'patterns',
+  'library',
+);
+const SKILL_CONVENTIONS_PATH = resolve(
+  SKILLS_ROOT,
+  'references',
+  'conventions.md',
+);
+const CORE_CONVENTIONS_TEMPLATE = resolve(
+  import.meta.dirname,
+  '..',
+  'mboss-core',
+  'src',
+  'scaffold',
+  'templates',
+  'conventions.ts',
 );
 
 /**
@@ -104,14 +126,31 @@ describe('the skill matches the tool surface', () => {
 });
 
 /**
+ * Where a worked example's document really lives.
+ *
+ * Most are core's own IR fixtures. The hero is
+ * not: it is a pattern the library ships, and
+ * copying it into `fixtures/ir` to make this
+ * lookup simpler would make two copies of the very
+ * thing this test exists to keep at one.
+ */
+function fixtureFor(name: string): string {
+  const inFixtures = resolve(CORE_FIXTURES, `${name}.workflow.json`);
+
+  if (existsSync(inFixtures)) return inFixtures;
+
+  return resolve(CORE_LIBRARY, name, `${name}.workflow.json`);
+}
+
+/**
  * The documents the skill teaches by, held against
- * the fixtures core compiles.
+ * the ones core keeps.
  *
  * This repository is the only one nesting both
  * mboss-core and mboss-skills, so it is the only
  * place these copies can be compared at all. Each
- * example names the fixture it was taken from, and
- * a fixture file carries a trailing newline a
+ * example names the document it was taken from,
+ * and a file on disk carries a trailing newline a
  * fenced block cannot represent — that one byte is
  * the only normalization allowed here.
  */
@@ -133,12 +172,56 @@ describe('the worked IR examples', () => {
   it.each(examples)(
     "embed core's $name fixture byte for byte",
     ({ document, name }) => {
-      const fixture = readFileSync(
-        resolve(CORE_FIXTURES, `${name}.workflow.json`),
-        'utf8',
-      );
+      const fixture = readFileSync(fixtureFor(name), 'utf8');
 
       expect(document).toBe(fixture.replace(/\n$/, ''));
     },
   );
+});
+
+/**
+ * The rule about two arms sharing the blocks below
+ * them is written once, in the template core
+ * writes a project's conventions from. The skill
+ * ships its own copy of that prose, and this is
+ * the only checkout holding both, so this is the
+ * only place a rewording on either side can be
+ * caught.
+ */
+function sharedBlockRule(template: string): string {
+  const flat = template.replace(/\s+/g, ' ');
+  const found = /## Two arms that end at the same blocks \*\*(.+?)\*\*/.exec(
+    flat,
+  );
+
+  if (found === null) {
+    throw new Error(
+      "mboss-core's conventions template no longer states the " +
+        'shared-block rule under the heading this reads it from.',
+    );
+  }
+
+  return found[1]!;
+}
+
+describe('the conventions the skill ships', () => {
+  const rule = sharedBlockRule(readFileSync(CORE_CONVENTIONS_TEMPLATE, 'utf8'));
+
+  /**
+   * So a heading that moved fails loudly here
+   * rather than leaving the check below comparing
+   * against nothing.
+   */
+  it('finds the rule in core to compare against', () => {
+    expect(rule).toContain('Two arms may share the blocks below them');
+  });
+
+  it("carries core's shared-block rule word for word", () => {
+    const shipped = readFileSync(SKILL_CONVENTIONS_PATH, 'utf8').replace(
+      /\s+/g,
+      ' ',
+    );
+
+    expect(shipped).toContain(rule);
+  });
 });

@@ -3,6 +3,7 @@ import {
   WorkflowNameSchema,
   applySpec,
   deleteNode,
+  patternSpec,
   readWorkflow,
 } from '@mboss/core';
 import { z } from 'zod';
@@ -12,7 +13,7 @@ import type { ToolContext } from '../project.js';
 import type { ToolDefinition } from '../registry.js';
 
 import { toolSuccess } from './result.js';
-import { libManifest, specOf } from './workflow.js';
+import { libManifest } from './workflow.js';
 
 const Input = z.object({
   workflow: WorkflowNameSchema,
@@ -63,7 +64,7 @@ async function remove(args: z.infer<typeof Input>, ctx: ToolContext) {
     ctx.mbossDir,
     {
       name: args.workflow,
-      spec: specOf(edited.ir),
+      spec: patternSpec(edited.ir),
       baseRevision: read.ir.revision,
     },
     { manifest: libManifest(ctx) },

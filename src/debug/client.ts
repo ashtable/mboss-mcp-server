@@ -23,6 +23,17 @@ export type Database = {
 export type OpenDatabase = (projectDir: string) => Promise<Database>;
 
 /**
+ * The names a project's `.env` may set the ledger
+ * under, most specific first.
+ *
+ * The editor resolves the same two names in the
+ * same order over the same file, so a person
+ * reading a run there and a tool reading it here
+ * land on one database.
+ */
+const NAMES = ['DBOS_SYSTEM_DATABASE_URL', 'DATABASE_URL'] as const;
+
+/**
  * The database a project's app talks to.
  *
  * Read from the project's own `.env` rather than
@@ -31,8 +42,8 @@ export type OpenDatabase = (projectDir: string) => Promise<Database>;
  * has no reason to be holding it.
  *
  * A tiny parser rather than a dotenv dependency.
- * One file, one variable, and this server is
- * bundled into every project that uses it.
+ * One file, two names, and this server is bundled
+ * into every project that uses it.
  */
 export function readDatabaseUrl(projectDir: string): string {
   const path = join(projectDir, '.env');
@@ -48,12 +59,16 @@ export function readDatabaseUrl(projectDir: string): string {
     );
   }
 
-  const url = valueOf(contents, 'DATABASE_URL');
-  if (url === undefined) {
-    throw new Error(`${path} sets no DATABASE_URL.`);
+  for (const name of NAMES) {
+    const url = valueOf(contents, name);
+
+    // A name set to nothing is a name not set.
+    if (url !== undefined && url !== '') return url;
   }
 
-  return url;
+  throw new Error(
+    `${path} sets neither DBOS_SYSTEM_DATABASE_URL nor DATABASE_URL.`,
+  );
 }
 
 /**
