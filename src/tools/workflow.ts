@@ -14,8 +14,8 @@ import { resolveCurrentWorkflow } from '../resources/current-workflow.js';
 /**
  * The few things the workflow tools all need:
  * which workflow a caller meant, what the project's
- * code-behind offers, and how to hand a document
- * back to `@mboss/core` as a spec.
+ * code-behind offers, and how to read a spec as a
+ * document so it can be checked.
  */
 
 /**
@@ -75,18 +75,6 @@ export function namedWorkflow(
  */
 export function libManifest(ctx: ToolContext): LibManifest {
   return loadOrScan(ctx.projectDir);
-}
-
-/**
- * A document as a spec: the parts an edit is
- * allowed to set. The envelope core owns — the
- * schema, the version, the revision, the name — is
- * left off, so a spec built from a document cannot
- * carry a revision back in and freeze the conflict
- * check.
- */
-export function specOf(ir: WorkflowIR): WorkflowSpec {
-  return { title: ir.title, nodes: ir.nodes, edges: ir.edges };
 }
 
 /**

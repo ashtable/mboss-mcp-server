@@ -20,6 +20,7 @@ import { readDatabaseUrl } from './client.js';
  */
 
 const URL = 'postgres://postgres:mboss@127.0.0.1:5434/fixture';
+const SYSTEM_URL = 'postgres://postgres:mboss@127.0.0.1:5434/fixture_dbos';
 
 let fixture: Fixture;
 
@@ -69,11 +70,52 @@ describe('readDatabaseUrl', () => {
     expect(readDatabaseUrl(fixture.dir)).toBe(URL);
   });
 
-  it('names the file when it holds no DATABASE_URL', () => {
+  /**
+   * The ledger is the DBOS system database, and a
+   * project that keeps it apart from the app's own
+   * says so under its own name. The editor reads
+   * the same two names in the same order over the
+   * same file, so a person reading a run there and
+   * a tool reading it here land on one database.
+   */
+  it('prefers DBOS_SYSTEM_DATABASE_URL when the file sets both', () => {
+    writeEnv(
+      [
+        `DATABASE_URL=${URL}`,
+        `DBOS_SYSTEM_DATABASE_URL=${SYSTEM_URL}`,
+        '',
+      ].join('\n'),
+    );
+
+    expect(readDatabaseUrl(fixture.dir)).toBe(SYSTEM_URL);
+  });
+
+  it('reads DATABASE_URL when it is the only one set', () => {
+    writeEnv(`DATABASE_URL=${URL}\n`);
+
+    expect(readDatabaseUrl(fixture.dir)).toBe(URL);
+  });
+
+  /**
+   * A name set to nothing is a name that is not
+   * set. Without this the winner of an empty first
+   * name would be an empty connection string.
+   */
+  it('passes over the first name when it is set to nothing', () => {
+    writeEnv(
+      ['DBOS_SYSTEM_DATABASE_URL=', `DATABASE_URL=${URL}`, ''].join('\n'),
+    );
+
+    expect(readDatabaseUrl(fixture.dir)).toBe(URL);
+  });
+
+  it('names the file and both names when it sets neither', () => {
     writeEnv('APP_BASE_URL=http://127.0.0.1:3200\n');
 
     expect(() => readDatabaseUrl(fixture.dir)).toThrow(/\.env/);
-    expect(() => readDatabaseUrl(fixture.dir)).toThrow(/DATABASE_URL/);
+    expect(() => readDatabaseUrl(fixture.dir)).toThrow(
+      /sets neither DBOS_SYSTEM_DATABASE_URL nor DATABASE_URL\./,
+    );
   });
 
   it('names the file when there is none', () => {

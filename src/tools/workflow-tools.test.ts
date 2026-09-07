@@ -3,8 +3,11 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
+  deleteNode,
+  patternSpec,
   proposalFile,
   readProposal,
+  renameNode,
   type Diagnostic,
   type WorkflowIR,
 } from '@mboss/core';
@@ -1251,6 +1254,43 @@ describe('workflow_rename_node', () => {
       ),
     ).toBe('WORKFLOW_NOT_FOUND');
   });
+
+  /**
+   * The tool hands core a spec, never a document.
+   * The envelope core owns — the schema, the
+   * version, the revision, the name — has to come
+   * off, or an edit would carry a revision back in
+   * and freeze the conflict check. Held against
+   * core's own strip, so what a spec is has one
+   * answer rather than a matching pair.
+   */
+  it('proposes the document with no envelope on it', async () => {
+    await createSample();
+    await applySample(LONGER_DRAFT, 1);
+
+    const before = await output<GetOutput>(
+      call(workflowGet, { name: 'sample' }),
+    );
+    const edited = renameNode(before.ir, { nodeId: 'work', newId: 'middle' });
+    if (!edited.ok) throw new Error(edited.message);
+
+    await output<EditOutput>(
+      call(workflowRenameNode, {
+        workflow: 'sample',
+        nodeId: 'work',
+        newId: 'middle',
+      }),
+    );
+
+    const got = await output<GetOutput>(call(workflowGet, { name: 'sample' }));
+    const proposed = patternSpec(got.ir);
+
+    expect(proposed).toEqual(patternSpec(edited.ir));
+    expect(proposed).not.toHaveProperty('$schema');
+    expect(proposed).not.toHaveProperty('version');
+    expect(proposed).not.toHaveProperty('revision');
+    expect(proposed).not.toHaveProperty('name');
+  });
 });
 
 describe('workflow_delete_node', () => {
@@ -1320,6 +1360,58 @@ describe('workflow_delete_node', () => {
     const got = await output<GetOutput>(call(workflowGet, { name: 'sample' }));
     expect(got.revision).toBe(2);
     expect(got.ir.nodes).toHaveLength(3);
+  });
+
+  /** The same promise the rename makes. */
+  it('proposes the document with no envelope on it', async () => {
+    await createSample();
+    await applySample(LONGER_DRAFT, 1);
+
+    const before = await output<GetOutput>(
+      call(workflowGet, { name: 'sample' }),
+    );
+    const edited = deleteNode(before.ir, { nodeId: 'work', reconnect: true });
+    if (!edited.ok) throw new Error(edited.message);
+
+    await output<EditOutput>(
+      call(workflowDeleteNode, { workflow: 'sample', nodeId: 'work' }),
+    );
+
+    const got = await output<GetOutput>(call(workflowGet, { name: 'sample' }));
+    const proposed = patternSpec(got.ir);
+
+    expect(proposed).toEqual(patternSpec(edited.ir));
+    expect(proposed).not.toHaveProperty('$schema');
+    expect(proposed).not.toHaveProperty('version');
+    expect(proposed).not.toHaveProperty('revision');
+    expect(proposed).not.toHaveProperty('name');
+  });
+});
+
+/**
+ * The strip that takes core's envelope back off a
+ * document belongs beside the code that puts it
+ * on. A second copy here would agree with core
+ * today and drift the first time core widened the
+ * envelope, with nothing in either repository able
+ * to notice.
+ */
+describe('the envelope strip', () => {
+  /**
+   * Spelled out of two pieces so the scan below
+   * cannot match the file it is written in.
+   */
+  const oldName = 'spec' + 'Of';
+
+  it("is core's, with no second copy under src/tools", () => {
+    const tools = import.meta.dirname;
+    const carrying = readdirSync(tools, { recursive: true, encoding: 'utf8' })
+      .filter((entry) => entry.endsWith('.ts'))
+      .filter((entry) =>
+        readFileSync(join(tools, entry), 'utf8').includes(oldName),
+      );
+
+    expect(carrying).toEqual([]);
   });
 });
 
