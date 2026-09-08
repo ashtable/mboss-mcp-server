@@ -189,7 +189,7 @@ describe('the node catalog', () => {
   });
 
   /**
-   * `groom_booking` builds six of the ten kinds.
+   * `groom_booking` builds six of the eleven kinds.
    * A fidelity gap in one of the other four would
    * otherwise hide behind the headline fixture.
    */
