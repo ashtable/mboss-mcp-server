@@ -39,6 +39,7 @@ const PORTS_CHECKED_AGAINST_CORE = [
   'durableWait',
   'emailSend',
   'loop',
+  'queue',
   'step',
   'transaction',
   'trigger',
@@ -149,6 +150,37 @@ describe('the node catalog', () => {
     expect(propertyOf(branch.config, 'elsePort')).toBeDefined();
   });
 
+  /**
+   * Every other kind's config drops a key it does
+   * not declare and says nothing about it. A
+   * queue's refuses one instead, because the SDK
+   * spells some of these limits differently and a
+   * limit dropped in silence is a queue running
+   * unbounded. The catalog has to carry that
+   * refusal, or an agent reads a promise this
+   * surface does not keep.
+   */
+  it('says a queue refuses a key it does not declare', () => {
+    const { config } = entryFor('queue');
+
+    expect(config.additionalProperties).toBe(false);
+    expect(propertyOf(config, 'queue').additionalProperties).toBe(false);
+    expect(propertyOf(config, 'enqueue').additionalProperties).toBe(false);
+  });
+
+  /**
+   * The rate limit is the one part of a queue that
+   * still drops what it does not know, and it is
+   * read by an agent through the same document, so
+   * the difference is stated here rather than left
+   * to be discovered.
+   */
+  it('leaves a rate limit as open as core wrote it', () => {
+    const queue = propertyOf(entryFor('queue').config, 'queue');
+
+    expect(propertyOf(queue, 'rateLimit').additionalProperties).toBeUndefined();
+  });
+
   it('accepts every node config groom_booking is built from', () => {
     for (const node of nodesOf('groom_booking')) {
       const { config } = entryFor(node.kind);
@@ -224,8 +256,46 @@ describe('the workflow schema', () => {
     expect(propertyOf(edge, 'from').required).toEqual(['node']);
   });
 
+  /**
+   * The document schema is generated from the same
+   * node union the catalog is, so the queue's
+   * refusal reaches a reader validating a whole
+   * workflow as well as one reading the kind on its
+   * own. Nothing here arranges that; this holds it
+   * to still being true.
+   */
+  it('carries the queue refusal into the node union', () => {
+    const config = propertyOf(branchFor('queue'), 'config');
+
+    expect(config.additionalProperties).toBe(false);
+    expect(propertyOf(config, 'queue').additionalProperties).toBe(false);
+  });
+
+  /**
+   * A queue fans its items out; it does not itself
+   * run once per item of something upstream. The
+   * two would nest, so core declares no `forEach`
+   * on the kind and the schema an agent writes
+   * against offers none.
+   */
+  it('offers a queue no fan-out of its own', () => {
+    expect(branchFor('queue').properties?.['forEach']).toBeUndefined();
+  });
+
   function nodeSchema(): JsonSchema {
     return itemsOf(propertyOf(SCHEMA, 'nodes'));
+  }
+
+  /** The node union's branch for one kind. */
+  function branchFor(kind: string): JsonSchema {
+    const found = (nodeSchema().oneOf ?? []).find((branch) => {
+      const member = branch.properties?.['kind'];
+
+      return isSchema(member) && member.const === kind;
+    });
+    if (found === undefined) throw new Error(`no node branch for ${kind}`);
+
+    return found;
   }
 });
 
@@ -242,6 +312,7 @@ const FIXTURES = [
   'form_intake',
   'form_retry',
   'groom_booking',
+  'queue_partitioned',
   'review_loop',
   'timer_wait',
 ];

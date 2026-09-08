@@ -118,9 +118,16 @@ export function runsQuery(request: RunsRequest): Query {
     };
   }
 
+  // Only the runs nothing else started. A queue
+  // enqueues one child run per item, so a single
+  // fan-out of fifty would fill a listing meant to
+  // answer what just happened. A child is reached
+  // from the run that started it, and by id, which
+  // the branch above still answers.
   return {
     text:
       `SELECT ${RUN_COLUMNS} FROM dbos.workflow_status ` +
+      'WHERE parent_workflow_id IS NULL ' +
       'ORDER BY created_at DESC LIMIT $1',
     values: [request.limit],
   };

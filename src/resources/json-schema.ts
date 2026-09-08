@@ -121,4 +121,5 @@ const PORTS: Record<NodeKind, CatalogPorts> = {
   approval: { ports: ['approved', 'rejected'], portsFromConfig: false },
   emailSend: OUT,
   codeStep: OUT,
+  queue: OUT,
 };

@@ -146,7 +146,27 @@ describe('the schema resources', () => {
       bare.dir,
     );
 
-    expect(catalog.kinds).toHaveLength(10);
+    expect(catalog.kinds).toHaveLength(11);
+  });
+
+  /**
+   * A queue fans its items out and then carries on,
+   * so a run leaves it the one way every other
+   * working block is left by. The catalog has to
+   * say so before there is a node to ask.
+   */
+  it('serve the ports a queue leaves by', async () => {
+    const bare = makeBareDirectory();
+    spare.push(bare);
+
+    const catalog = await readJson<NodeCatalog>(
+      'mboss://node-catalog',
+      bare.dir,
+    );
+    const queue = catalog.kinds.find((entry) => entry.kind === 'queue');
+
+    expect(queue?.ports).toEqual(['out']);
+    expect(queue?.portsFromConfig).toBe(false);
   });
 
   it('serve the document schema outside a project', async () => {

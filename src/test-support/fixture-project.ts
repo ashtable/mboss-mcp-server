@@ -103,6 +103,7 @@ const CONTRACT_STUB = [
   '// its types from.',
   'export type WorkflowEntry = { name: string };',
   'export type ScheduleEntry = { name: string };',
+  'export type QueueEntry = { name: string };',
   '',
 ].join('\n');
 

@@ -81,6 +81,30 @@ describe('the debug queries', () => {
     expect(query.values).toEqual([MAX_RUNS]);
   });
 
+  /**
+   * A queue enqueues one child run per item, so a
+   * single fan-out of fifty buries every run a
+   * person came to look at. The listing answers
+   * with the runs somebody started; the children
+   * belong to the run that started them.
+   */
+  it('lists only the runs nothing else started', () => {
+    const listing = runsQuery({ limit: 10 });
+
+    expect(listing.text).toContain('parent_workflow_id IS NULL');
+  });
+
+  /**
+   * By id is how a child is reached at all — from
+   * its parent's steps, or from a queue's own
+   * listing — so the filter is the listing's alone.
+   */
+  it('opens a child run by id all the same', () => {
+    const one = runsQuery({ runId: 'wf-2', limit: 10 });
+
+    expect(one.text).not.toContain('parent_workflow_id');
+  });
+
   it('caps a listing at fifty runs', () => {
     // The tool's input schema is built from this
     // constant, so the cap is written down once.
