@@ -143,7 +143,8 @@ async function scaffold(args: z.infer<typeof Input>, ctx: ToolContext) {
  * the project's `prettier --check`.
  */
 function signatureOf(name: string, node: WorkflowNode): string {
-  const param = node.in === undefined ? '' : `input: ${node.in}`;
+  const taken = parameterOf(node);
+  const param = taken === undefined ? '' : `${taken.name}: ${taken.type}`;
   const answer = answerOf(node);
   const returns = `Promise<${answer.join(' | ')}>`;
 
@@ -171,6 +172,35 @@ function signatureOf(name: string, node: WorkflowNode): string {
   if (answer.length === 1) return broken;
 
   return `${opened}: Promise<\n${union(answer)}\n>`;
+}
+
+type Parameter = { name: string; type: string };
+
+/**
+ * What the handler is called with, or nothing where
+ * the block gives it nothing.
+ *
+ * A queue is the one block whose handler is not
+ * called with what the block itself is handed: the
+ * block takes a collection and the handler runs
+ * once per item of it, so the item type is what the
+ * stub declares. It is named `item` because that is
+ * what the generated call site already calls it.
+ *
+ * Read here rather than at each of the three places
+ * that need it, so a stub cannot declare one
+ * parameter and go on to talk about another.
+ */
+function parameterOf(node: WorkflowNode): Parameter | undefined {
+  if (node.kind === 'queue') {
+    const { itemType } = node.config;
+
+    return itemType === undefined
+      ? undefined
+      : { name: 'item', type: itemType };
+  }
+
+  return node.in === undefined ? undefined : { name: 'input', type: node.in };
 }
 
 /**
@@ -243,16 +273,19 @@ type StubParts = {
 function handlerStub(parts: StubParts): string {
   const { node, workflow, signature, imports, unknownTypes: unknown } = parts;
 
-  // The thrown value carries the input because a
-  // handler that is still a stub fails inside a
-  // run, where what it was called with is the only
+  // The thrown value carries what the handler was
+  // called with because a handler that is still a
+  // stub fails inside a run, where that is the only
   // thing worth knowing. It also means the
-  // parameter is used, which the project's own
-  // lint requires.
+  // parameter is used, which the project's own lint
+  // requires — so it has to name the one the
+  // signature declared rather than a fixed word.
+  const taken = parameterOf(node);
   const refusal =
-    node.in === undefined
+    taken === undefined
       ? "throw new Error('no implementation yet');"
-      : 'throw new Error(`no implementation yet: ${JSON.stringify(input)}`);';
+      : 'throw new Error(`no implementation yet: ' +
+        `\${JSON.stringify(${taken.name})}\`);`;
 
   return [
     ...imports,
@@ -304,7 +337,7 @@ function testStub(exported: string, nodeId: string): string {
  * repeats.
  */
 function declaredTypes(node: WorkflowNode): string[] {
-  return [...new Set([node.in, node.out])].filter(
+  return [...new Set([parameterOf(node)?.type, node.out])].filter(
     (name): name is string => name !== undefined,
   );
 }

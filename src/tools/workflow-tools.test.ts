@@ -1145,6 +1145,124 @@ describe('workflow_scaffold_step', () => {
       call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'work' }),
     ).rejects.toThrow(/handler/);
   });
+
+  /**
+   * The sample with a queue where the step was.
+   *
+   * The block is handed a whole `Booking` and its
+   * handler is called once per page inside it, so
+   * what the stub takes is the item type and never
+   * the block's own input. Both are declared here
+   * so a stub that read the wrong one would say so.
+   */
+  function queuingDraft(config: object): object {
+    return {
+      ...TYPED_DRAFT,
+      nodes: [
+        TYPED_DRAFT.nodes[0],
+        {
+          id: 'index',
+          title: 'Index each page',
+          kind: 'queue',
+          in: 'Booking',
+          handler: { export: 'indexPage' },
+          config: {
+            itemsPath: 'pages',
+            queue: { name: 'document-index' },
+            ...config,
+          },
+        },
+      ],
+      edges: [{ id: 'e1', from: { node: 'start' }, to: { node: 'index' } }],
+    };
+  }
+
+  /** A `lib/` exporting the types it is given. */
+  async function withLibTypes(...names: string[]): Promise<void> {
+    await mkdir(join(fixture.dir, 'lib'), { recursive: true });
+    writeFileSync(
+      join(fixture.dir, 'lib', 'types.ts'),
+      names.map((name) => `export type ${name} = { id: string };\n`).join(''),
+      'utf8',
+    );
+  }
+
+  it('types a queue handler by the item it is called with', async () => {
+    await withLibTypes('Booking', 'Page');
+    await createSample();
+    await applySample(queuingDraft({ itemType: 'Page' }), 1);
+
+    const scaffolded = await output<ScaffoldOutput>(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'index' }),
+    );
+
+    expect(scaffolded.created[0]?.signature).toBe(
+      'export async function indexPage(item: Page): Promise<void>',
+    );
+  });
+
+  /**
+   * A queue that names no item type has nothing to
+   * declare a parameter as. `unknown` would be a
+   * guess, and the block's own input is the
+   * collection rather than an item of it.
+   */
+  it('gives a queue that names no item type no parameter', async () => {
+    await withLibTypes('Booking');
+    await createSample();
+    await applySample(queuingDraft({}), 1);
+
+    const scaffolded = await output<ScaffoldOutput>(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'index' }),
+    );
+    const written = readFileSync(handlerAt('indexPage'), 'utf8');
+
+    expect(scaffolded.created[0]?.signature).toBe(
+      'export async function indexPage(): Promise<void>',
+    );
+    expect(written).not.toContain('Booking');
+    expect(await formatted(written)).toBe(written);
+  });
+
+  /**
+   * The stub throws what it was called with, and
+   * the projects this writes into forbid a
+   * parameter nothing reads. So the refusal has to
+   * name whichever parameter the signature
+   * declared, or a queue's stub arrives failing
+   * their lint.
+   */
+  it('imports the item type and throws what it was given', async () => {
+    await withLibTypes('Booking', 'Page');
+    await createSample();
+    await applySample(queuingDraft({ itemType: 'Page' }), 1);
+
+    await output(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'index' }),
+    );
+    const written = readFileSync(handlerAt('indexPage'), 'utf8');
+
+    expect(written).toContain("import type { Page } from './types.js';");
+    expect(written).not.toContain('Booking');
+    expect(written).toContain('JSON.stringify(item)');
+    expect(await formatted(written)).toBe(written);
+  });
+
+  it('names an item type the code-behind has not got yet', async () => {
+    await withLibTypes('Booking');
+    await createSample();
+    await applySample(queuingDraft({ itemType: 'Page' }), 1);
+
+    await output(
+      call(workflowScaffoldStep, { workflow: 'sample', nodeId: 'index' }),
+    );
+    const written = readFileSync(handlerAt('indexPage'), 'utf8');
+
+    expect(written).not.toContain('import');
+    expect(written).toContain('(item: Page): Promise<void>');
+    expect(written).toContain('`Page` is not exported from `lib/` yet.');
+    expect(written).not.toContain('Booking');
+  });
 });
 
 /**

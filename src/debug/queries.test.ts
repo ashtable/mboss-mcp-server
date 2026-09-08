@@ -81,6 +81,43 @@ describe('the debug queries', () => {
     expect(query.values).toEqual([MAX_RUNS]);
   });
 
+  /**
+   * A queue enqueues one child run per item, so a
+   * single fan-out of fifty buries every run a
+   * person came to look at. A queue child belongs
+   * to the run that started it, and is reached
+   * from there.
+   */
+  it('keeps a queued child off the listing', () => {
+    const listing = runsQuery({ limit: 10 });
+
+    expect(listing.text).toContain('parent_workflow_id IS NULL');
+  });
+
+  /**
+   * A forked run is nobody's child: DBOS leaves
+   * its parent column null and records the run it
+   * was forked from in a column of its own. So a
+   * fork lists like any other top-level run, and
+   * the listing does not go looking for one.
+   */
+  it('leaves a forked run on the listing', () => {
+    const listing = runsQuery({ limit: 10 });
+
+    expect(listing.text).not.toContain('forked_from');
+  });
+
+  /**
+   * By id is how a child is reached at all — from
+   * its parent's steps, or from a queue's own
+   * listing — so the filter is the listing's alone.
+   */
+  it('opens a child run by id all the same', () => {
+    const one = runsQuery({ runId: 'wf-2', limit: 10 });
+
+    expect(one.text).not.toContain('parent_workflow_id');
+  });
+
   it('caps a listing at fifty runs', () => {
     // The tool's input schema is built from this
     // constant, so the cap is written down once.
