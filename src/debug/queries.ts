@@ -118,12 +118,17 @@ export function runsQuery(request: RunsRequest): Query {
     };
   }
 
-  // Only the runs nothing else started. A queue
+  // Queue children stay off the listing. A queue
   // enqueues one child run per item, so a single
   // fan-out of fifty would fill a listing meant to
   // answer what just happened. A child is reached
   // from the run that started it, and by id, which
   // the branch above still answers.
+  //
+  // A forked run is nobody's child: DBOS leaves
+  // its parent column null and records the run it
+  // was forked from in a column of its own. So a
+  // fork lists here like any other top-level run.
   return {
     text:
       `SELECT ${RUN_COLUMNS} FROM dbos.workflow_status ` +

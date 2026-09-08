@@ -84,14 +84,27 @@ describe('the debug queries', () => {
   /**
    * A queue enqueues one child run per item, so a
    * single fan-out of fifty buries every run a
-   * person came to look at. The listing answers
-   * with the runs somebody started; the children
-   * belong to the run that started them.
+   * person came to look at. A queue child belongs
+   * to the run that started it, and is reached
+   * from there.
    */
-  it('lists only the runs nothing else started', () => {
+  it('keeps a queued child off the listing', () => {
     const listing = runsQuery({ limit: 10 });
 
     expect(listing.text).toContain('parent_workflow_id IS NULL');
+  });
+
+  /**
+   * A forked run is nobody's child: DBOS leaves
+   * its parent column null and records the run it
+   * was forked from in a column of its own. So a
+   * fork lists like any other top-level run, and
+   * the listing does not go looking for one.
+   */
+  it('leaves a forked run on the listing', () => {
+    const listing = runsQuery({ limit: 10 });
+
+    expect(listing.text).not.toContain('forked_from');
   });
 
   /**
